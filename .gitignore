@@ -1,0 +1,41 @@
+# ==========================================
+# SMR Hub - Git ignore
+# ==========================================
+
+# Development / temporary phase artifacts
+scratch_*/
+backup_6c/
+
+# Old development tools
+auditor.js
+
+# Local / environment files
+.freebuff
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Editor configuration
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*.log
+
+# Backups
+*.bak
+*.backup
+*.old

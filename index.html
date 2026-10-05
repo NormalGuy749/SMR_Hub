@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light" data-text-size="md" data-animations="on">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" id="meta-desc" content="Recursos, tests y herramientas para estudiar Sistemas Microinformáticos y Redes.">
+  <title>SMR Hub</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='5'%20fill='%231d4ed8'/%3E%3Ctext%20x='12'%20y='17'%20font-family='sans-serif'%20font-size='14'%20font-weight='700'%20fill='%23fff'%20text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E">
+  <script>
+    /* Aplica tema y preferencias antes del primer render para evitar parpadeo */
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem('smrhub:settings') || '{}');
+        var dark = s.theme ? s.theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var root = document.documentElement;
+        root.dataset.theme = dark ? 'dark' : 'light';
+        if (s.textSize) root.dataset.textSize = s.textSize;
+        if (s.animations === false) root.dataset.animations = 'off';
+      } catch (e) { /* localStorage no disponible */ }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Saltar al contenido</a>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="Barra lateral">
+      <div class="sidebar-brand">
+        <a class="brand-link" href="#/inicio">SMR Hub</a>
+      </div>
+      <nav class="sidebar-nav" aria-label="Secciones">
+        <p class="nav-group">Secciones</p>
+        <ul id="nav-list"></ul>
+      </nav>
+      <div class="sidebar-footer">
+        <ul id="nav-footer"></ul>
+      </div>
+    </aside>
+
+    <div class="scrim" id="scrim" hidden></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menu-btn" type="button"
+                aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar"></button>
+        <div class="topbar-title">
+          <h1 id="page-title">Inicio</h1>
+          <p id="page-desc"></p>
+        </div>
+        <div class="topbar-actions">
+          <div class="search" id="search" role="search">
+            <span class="search-icon" id="search-icon" aria-hidden="true"></span>
+            <input type="search" class="input search-input" id="search-input"
+                   placeholder="Buscar" aria-label="Buscar" autocomplete="off" spellcheck="false">
+            <div class="search-results" id="search-results" hidden></div>
+          </div>
+          <button class="icon-btn palette-btn" id="palette-btn" type="button"
+                  title="Búsqueda global (Ctrl+K)" aria-label="Abrir búsqueda global (Ctrl+K)"></button>
+          <button class="icon-btn" id="theme-btn" type="button"></button>
+        </div>
+      </header>
+
+      <main class="content" id="content" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <!-- Fase 5.6: navegación inferior para pantallas pequeñas.
+       No sustituye al sidebar: se muestra únicamente por debajo de 860px. -->
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Navegación principal"></nav>
+
+  <script src="js/data.js" defer></script>
+  <script src="js/curriculum.js" defer></script>
+  <script src="js/topics.js" defer></script>
+  <script src="js/questionTopics.js" defer></script>
+  <script src="js/contentTopics.js" defer></script>
+  <script src="js/moduleTopics.js" defer></script>
+  <script src="js/content.js" defer></script>
+  <script src="js/questions.js" defer></script>
+  <script src="js/srs.js" defer></script>
+  <script src="js/tools.js" defer></script>
+  <script src="js/tests.js" defer></script>
+  <script src="js/profile.js" defer></script>
+  <script src="js/app.js" defer></script>
+</body>
+</html>
