@@ -39,3 +39,6 @@ Thumbs.db
 *.bak
 *.backup
 *.old
+
+# Temporary phase summary
+resumen-fase6.txt
