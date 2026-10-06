@@ -3111,7 +3111,14 @@ const ROUTES = {
   }
 };
 
-const NAV_MAIN = ['inicio', 'estudio', 'mi-smr', 'recursos', 'redes', 'sistemas', 'casos', 'mapa', 'curriculo', 'herramientas', 'tests', 'glosario', 'estadisticas'];
+/* FASE 7: navegacion agrupada por areas. Mismas rutas, mas jerarquia. */
+const NAV_GROUPS = [
+  { label: 'Personal', items: ['inicio', 'mi-smr'] },
+  { label: 'Estudio', items: ['estudio', 'tests'] },
+  { label: 'Contenido', items: ['recursos', 'redes', 'sistemas', 'casos', 'glosario', 'mapa'] },
+  { label: 'Curriculo', items: ['curriculo'] },
+  { label: 'Herramientas', items: ['herramientas', 'estadisticas'] }
+];
 const NAV_FOOTER = ['configuracion'];
 
 /* ---------- Navegación lateral ---------- */
@@ -3125,7 +3132,18 @@ function buildNav() {
       `${SMR.icon(route.icon)}<span>${route.title}</span></a>`;
     return li;
   };
-  dom.navList.replaceChildren(...NAV_MAIN.map(makeItem));
+  /* FASE 7: un grupo por area + su lista de enlaces (mismo router). */
+  const frag = document.createDocumentFragment();
+  NAV_GROUPS.forEach((group) => {
+    const p = document.createElement('p');
+    p.className = 'nav-group';
+    p.textContent = group.label;
+    frag.appendChild(p);
+    const ul = document.createElement('ul');
+    ul.replaceChildren(...group.items.map(makeItem));
+    frag.appendChild(ul);
+  });
+  dom.navList.replaceChildren(frag);
   dom.navFooter.replaceChildren(...NAV_FOOTER.map(makeItem));
 }
 
@@ -3550,6 +3568,8 @@ function init() {
   });
 
   window.addEventListener('hashchange', render);
+  window.addEventListener('hashchange', () => { const h = parseHash(); document.title = (ROUTES[h.id] ? ROUTES[h.id].title + ' · ' : '') + 'SMR Hub'; });
+  (() => { const h = parseHash(); document.title = (ROUTES[h.id] ? ROUTES[h.id].title + ' · ' : '') + 'SMR Hub'; })();
   updateThemeButton();
   render();
 
