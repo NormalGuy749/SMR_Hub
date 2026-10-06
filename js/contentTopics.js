@@ -134,8 +134,9 @@
       version: CONTENT_TOPICS_VERSION,
       resources: Object.freeze(resources),
       cases: Object.freeze(cases),
-      byResourceId: new Map(resources.map((r) => [r.ref, r])),
-      byCaseId: new Map(cases.map((c) => [c.ref, c])),
+      /* 6D.8 (INT-02): lookups congelados, sin prototipo y sin Map expuesto. */
+      byResourceId: Object.freeze(Object.assign(Object.create(null), Object.fromEntries(resources.map((r) => [r.ref, r])))),
+      byCaseId: Object.freeze(Object.assign(Object.create(null), Object.fromEntries(cases.map((c) => [c.ref, c])))),
       problems: Object.freeze(problems)
     });
     return INDEX;
@@ -151,22 +152,22 @@
   function contentTopics() { return ensureIndex(); }
 
   function topicOfResource(resourceId) {
-    const e = ensureIndex().byResourceId.get(String(resourceId));
+    const e = ensureIndex().byResourceId[String(resourceId)];
     return e ? e.primaryTopicId : null;
   }
 
   function topicsOfResource(resourceId) {
-    const e = ensureIndex().byResourceId.get(String(resourceId));
+    const e = ensureIndex().byResourceId[String(resourceId)];
     return e ? e.links.map((l) => l.topicId) : [];
   }
 
   function topicOfCase(caseId) {
-    const e = ensureIndex().byCaseId.get(String(caseId));
+    const e = ensureIndex().byCaseId[String(caseId)];
     return e ? e.primaryTopicId : null;
   }
 
   function topicsOfCase(caseId) {
-    const e = ensureIndex().byCaseId.get(String(caseId));
+    const e = ensureIndex().byCaseId[String(caseId)];
     return e ? e.links.map((l) => l.topicId) : [];
   }
 
@@ -203,10 +204,10 @@
 
     /* Cobertura: los 19 recursos y 6 casos reales deben estar enlazados. */
     resIds.forEach((id) => {
-      if (!ix.byResourceId.has(id)) errors.push({ code: 'unmapped-resource', ref: id, detail: 'recurso real sin enlace a topic' });
+      if (!ix.byResourceId[id]) errors.push({ code: 'unmapped-resource', ref: id, detail: 'recurso real sin enlace a topic' });
     });
     caseIds.forEach((id) => {
-      if (!ix.byCaseId.has(id)) errors.push({ code: 'unmapped-case', ref: id, detail: 'caso real sin enlace a topic' });
+      if (!ix.byCaseId[id]) errors.push({ code: 'unmapped-case', ref: id, detail: 'caso real sin enlace a topic' });
     });
     ix.resources.forEach((r) => {
       if (!resIds.has(r.ref)) errors.push({ code: 'orphan-link', ref: r.ref, detail: 'enlace a recurso inexistente' });

@@ -1682,8 +1682,15 @@ function currCourse(course) {
 /* Bloques de la ficha que no tienen datos en este registro */
 function currMissingParts(cur) {
   const missing = [];
-  if (!cur.modules1 || !cur.modules1.length) missing.push('Los módulos de 1.º de SMR');
-  if (!cur.modules2 || !cur.modules2.length) missing.push('Los módulos de 2.º de SMR');
+  /* 6D.8 (INT-03): la completitud de los contenedores de módulos se
+     consulta a la capa curricular (curriculumIndex), no a la ficha.
+     Los demás bloques (optativas, proyecto, FCT, versión) siguen
+     leyéndose de la fuente: son datos de ficha, no derivables. */
+  const ix = (typeof SMR.curriculumIndex === 'function') ? SMR.curriculumIndex() : null;
+  const bucket = ix && ix.byCurriculum ? ix.byCurriculum[cur.id] : null;
+  const hasKind = (kind) => Array.isArray(bucket) && bucket.some((m) => m.kind === kind);
+  if (!hasKind('modules1')) missing.push('Los módulos de 1.º de SMR');
+  if (!hasKind('modules2')) missing.push('Los módulos de 2.º de SMR');
   if (!cur.electives || !cur.electives.length) missing.push('El módulo profesional optativo');
   if (!cur.project) missing.push('El proyecto intermodular');
   if (!cur.companyTraining) missing.push('La formación en empresa u organismo equiparado');

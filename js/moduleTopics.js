@@ -74,6 +74,9 @@
 
   const MODULE_TOPICS_VERSION = 1;
 
+  /* 6D.8 (INT-02): lookup vacío compartido para el caso sin dependencia. */
+  const EMPTY_LOOKUP = Object.freeze(Object.create(null));
+
   /* ---------- Tabla curada POR CÓDIGO: topic → módulo ----------
      [topicId, role, confidence, evidence] */
 
@@ -205,15 +208,16 @@
     const problems = [];
     const ix = (typeof SMR.curriculumIndex === 'function') ? SMR.curriculumIndex() : null;
     if (!ix) {
-      INDEX = Object.freeze({ version: MODULE_TOPICS_VERSION, links: Object.freeze([]), byModuleId: new Map(), byTopicId: new Map(), modulesLinked: 0, codesWithoutLinks: Object.freeze([]), problems: Object.freeze([{ code: 'missing-dependency', detail: 'curriculum.js no cargado: capa no disponible' }]) });
+      INDEX = Object.freeze({ version: MODULE_TOPICS_VERSION, links: Object.freeze([]), byModuleId: EMPTY_LOOKUP, byTopicId: EMPTY_LOOKUP, modulesLinked: 0, codesWithoutLinks: Object.freeze([]), problems: Object.freeze([{ code: 'missing-dependency', detail: 'curriculum.js no cargado: capa no disponible' }]) });
       return INDEX;
     }
 
     const tableByCode = new Map(CODE_LINKS.map((c) => [c.code, c]));
     const seenCodes = new Set();
     const links = [];
-    const byModuleId = new Map();
-    const byTopicId = new Map();
+    /* 6D.8 (INT-02): lookups internos sin prototipo; congelados al exponer. */
+    const byModuleId = Object.create(null);
+    const byTopicId = Object.create(null);
     const instancesPerCode = new Map();
     const codesWithoutLinks = [];
 
@@ -243,10 +247,10 @@
       });
       entries.forEach((e) => {
         links.push(e);
-        if (!byTopicId.has(e.topicId)) byTopicId.set(e.topicId, []);
-        byTopicId.get(e.topicId).push(e);
+        if (!(e.topicId in byTopicId)) byTopicId[e.topicId] = [];
+        byTopicId[e.topicId].push(e);
       });
-      byModuleId.set(m.moduleId, entries);
+      byModuleId[m.moduleId] = entries;
       seenCodes.add(String(m.code));
     });
 
@@ -266,8 +270,8 @@
       version: MODULE_TOPICS_VERSION,
       totalModules: ix.total,
       links: Object.freeze(links),
-      byModuleId: byModuleId,
-      byTopicId: byTopicId,
+      byModuleId: Object.freeze(byModuleId),
+      byTopicId: Object.freeze(byTopicId),
       modulesLinked: byModuleId.size,
       codesWithoutLinks: Object.freeze(codesWithoutLinks.slice().sort()),
       problems: Object.freeze(problems)
@@ -287,20 +291,20 @@
   /* Topics de un módulo, en orden editorial declarado (determinista,
      independiente del orden de datos). [] si no existe o sin mapping. */
   function topicsOfModule(moduleId) {
-    const entries = ensureIndex().byModuleId.get(String(moduleId));
+    const entries = ensureIndex().byModuleId[String(moduleId)];
     return entries ? entries.map((e) => e.topicId) : [];
   }
 
   /* Módulos que enseñan un topic, orden lexicográfico de moduleId
      (independiente del orden de declaración de currículos). */
   function modulesOfTopic(topicId) {
-    const entries = ensureIndex().byTopicId.get(String(topicId));
+    const entries = ensureIndex().byTopicId[String(topicId)];
     return entries ? entries.map((e) => e.moduleId).sort() : [];
   }
 
   /* Topic principal = el primero declarado (determinista). */
   function topicOfModule(moduleId) {
-    const entries = ensureIndex().byModuleId.get(String(moduleId));
+    const entries = ensureIndex().byModuleId[String(moduleId)];
     return entries && entries.length ? entries[0].topicId : null;
   }
 
@@ -362,7 +366,8 @@
   function equivalentModules(moduleId) {
     const cix = (typeof SMR.curriculumIndex === 'function') ? SMR.curriculumIndex() : null;
     if (!cix) return [];
-    const me = cix.byId.get(String(moduleId));
+    /* 6D.8 (INT-02): el índice ya no expone el Map byId; usar la API. */
+    const me = (typeof SMR.getModuleById === 'function') ? SMR.getModuleById(moduleId) : null;
     if (!me || me.code == null || me.kind === 'electives') return [];
 
     const out = [];
@@ -437,7 +442,7 @@
       byRole[l.role] = (byRole[l.role] || 0) + 1;
     });
 
-    const topicsCovered = [...ix.byTopicId.keys()].sort();
+    const topicsCovered = Object.keys(ix.byTopicId).sort();
 
     return {
       ok: errors.length === 0,
@@ -446,7 +451,7 @@
       totalLinks: ix.links.length,
       modulesLinked: ix.modulesLinked,
       topicsCovered,
-      topicsWithoutModules: (SMR.topics ? SMR.topics.list : []).map((t) => t.id).filter((id) => !ix.byTopicId.has(id)).sort(),
+      topicsWithoutModules: (SMR.topics ? SMR.topics.list : []).map((t) => t.id).filter((id) => !(id in ix.byTopicId)).sort(),
       modulesWithoutTopics: ix.codesWithoutLinks,
       byConfidence,
       byRole,

@@ -52,7 +52,8 @@
 
   function buildMapping() {
     const entries = [];
-    const byQuestionId = new Map();
+    /* 6D.8 (INT-02): lookup interno sin prototipo; congelado al exponer. */
+    const byQuestionId = Object.create(null);
     const problems = [];
 
     const srsMod = SMR.srs;
@@ -60,7 +61,7 @@
     if (!srsMod || !topicsMod) {
       return {
         version: MAPPING_VERSION, entries: Object.freeze([]),
-        byQuestionId: new Map(), problems: Object.freeze([
+        byQuestionId: Object.freeze(Object.create(null)), problems: Object.freeze([
           { code: 'missing-dependency', detail: 'srs.js o topics.js no cargados: mapping no disponible' }
         ])
       };
@@ -138,10 +139,10 @@
           position /* informativo: nunca identidad */
         });
         entries.push(entry);
-        if (byQuestionId.has(questionId)) {
+        if (questionId in byQuestionId) {
           problems.push({ code: 'duplicate-question-id', questionId, detail: 'colisión de hash de contenido: revisar 6C.5' });
         }
-        byQuestionId.set(questionId, entry);
+        byQuestionId[questionId] = entry;
       });
     });
 
@@ -149,7 +150,7 @@
       version: MAPPING_VERSION,
       total: entries.length,
       entries: Object.freeze(entries),
-      byQuestionId: byQuestionId,
+      byQuestionId: Object.freeze(byQuestionId),
       problems: Object.freeze(problems)
     });
     return INDEX;
@@ -167,7 +168,7 @@
   }
 
   function topicOf(questionId) {
-    return ensureMapping().byQuestionId.get(String(questionId)) || null;
+    return ensureMapping().byQuestionId[String(questionId)] || null;
   }
 
   /* Preguntas de un topic (solo active). Orden estable por orden de datos. */
