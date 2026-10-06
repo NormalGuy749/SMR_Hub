@@ -62,8 +62,10 @@
 
   function buildIndex() {
     const modules = [];
-    const byId = new Map();
-    const byCurriculum = new Map();
+    /* 6D.8 (INT-02): lookups internos sobre objetos sin prototipo;
+      se congelan antes de exponerlos en el INDEX. */
+    const byId = Object.create(null);
+    const byCurriculum = Object.create(null);
     const seenBase = new Map(); /* baseId (y sufijos) -> registro */
     const structural = [];
     const buildErrors = [];
@@ -79,7 +81,7 @@
         return;
       }
       const bucket = [];
-      byCurriculum.set(c.id, bucket);
+      byCurriculum[c.id] = bucket;
 
       const add = (m, kind) => {
         if (!m || typeof m !== 'object') {
@@ -122,7 +124,7 @@
           curriculumStatus: c.status || null
         });
         modules.push(entry);
-        byId.set(id, entry);
+        byId[id] = entry;
         bucket.push(entry);
       };
 
@@ -162,8 +164,9 @@
       version: INDEX_VERSION,
       total: modules.length,
       modules: Object.freeze(modules.slice()),
-      byId: byId,
-      byCurriculum: byCurriculum,
+      /* 6D.8 (INT-02): lookups y buckets congelados UNA VEZ POBLADOS. */
+      byId: Object.freeze(byId),
+      byCurriculum: (() => { Object.keys(byCurriculum).forEach((k) => { byCurriculum[k] = Object.freeze(byCurriculum[k]); }); return Object.freeze(byCurriculum); })(),
       structuralDuplicates: Object.freeze(structural),
       buildErrors: Object.freeze(buildErrors)
     });
@@ -186,7 +189,8 @@
   /* Módulos de un currículo, en orden de declaración; [] si no existe
      o el currículo no tiene módulos verificados. */
   function getCurriculumModules(curriculumId) {
-    return ensureIndex().byCurriculum.get(String(curriculumId)) || [];
+    const b = ensureIndex().byCurriculum[String(curriculumId)];
+    return b || [];
   }
 
   /* Normaliza course al SEGMENTO 'c1' | 'c2' | 'cx' (mismo formato que
@@ -199,20 +203,39 @@
     return null;
   }
 
+  /* 6D.8 (INT-01): array congelado vacío compartido (invariante). */
+  const EMPTY_MODULES = Object.freeze([]);
+
   /* Busca por (curriculumId, course, code). Acepta course 1|2|'x'|'cx'|null.
+     CONTRATO (6D.8, INT-01): getModule devuelve la instancia SOLO si la
+     búsqueda es ÚNICA. Si hay varias coincidencias (p. ej. aragon:c2:1713
+     y aragon:c2:1713-2, ambas code "1713" y segmento c2) devuelve null:
+     la ambigüedad NUNCA se oculta eligiendo la primera. Para enumerar
+     todas las coincidencias usa findModules(); para identificar una
+     instancia concreta usa getModuleById() (identidad exacta).
      Las electivas code:null solo son alcanzables vía getModuleById(). */
   function getModule(curriculumId, course, code) {
+    const matches = findModules(curriculumId, course, code);
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  /* 6D.8 (INT-01): enumera TODAS las coincidencias de
+     (curriculumId, course, code), haciendo visible la ambigüedad.
+     Devuelve un array congelado (posiblemente vacío); nunca null.
+     Orden: el de declaración del currículo. */
+  function findModules(curriculumId, course, code) {
     const c = normalizeCourse(course);
-    if (!c || code == null) return null;
-    const bucket = ensureIndex().byCurriculum.get(String(curriculumId));
-    if (!bucket) return null;
+    if (!c || code == null) return EMPTY_MODULES;
+    const bucket = ensureIndex().byCurriculum[String(curriculumId)];
+    if (!bucket) return EMPTY_MODULES;
     const codeStr = String(code);
-    return bucket.find((e) => e.courseSegment === c && String(e.code) === codeStr) || null;
+    const out = bucket.filter((e) => e.courseSegment === c && String(e.code) === codeStr);
+    return out.length === bucket.length ? bucket : Object.freeze(out);
   }
 
   /* Busca por moduleId completo (única vía para electivas code:null). */
   function getModuleById(moduleId) {
-    return ensureIndex().byId.get(String(moduleId)) || null;
+    return ensureIndex().byId[String(moduleId)] || null;
   }
 
   /* ---------- Validador (solo lectura: detecta, nunca corrige) ----------
@@ -293,6 +316,7 @@
   SMR.getCurriculumModules = getCurriculumModules;
   SMR.getModule = getModule;
   SMR.getModuleById = getModuleById;
+  SMR.findModules = findModules;
   SMR.validateCurriculumIndex = validateCurriculumIndex;
 
   /* Utilidades internas, solo para las pruebas de la fase (no es API pública). */
