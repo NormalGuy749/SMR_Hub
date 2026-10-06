@@ -272,7 +272,7 @@
       links: Object.freeze(links),
       byModuleId: Object.freeze(byModuleId),
       byTopicId: Object.freeze(byTopicId),
-      modulesLinked: byModuleId.size,
+      modulesLinked: Object.keys(byModuleId).length,
       codesWithoutLinks: Object.freeze(codesWithoutLinks.slice().sort()),
       problems: Object.freeze(problems)
     });
