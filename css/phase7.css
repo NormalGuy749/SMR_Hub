@@ -15,7 +15,7 @@
 
   /* Jerarquía tipográfica display para headers de página/hero */
   --fs-hero: 2.1rem;
-  --sidebar-group-gap: 14px;
+  --sidebar-group-gap: var(--sp-3); /* 14→12: en escala */
 }
 
 html[data-theme='dark'] {
@@ -31,10 +31,11 @@ html[data-theme='dark'] {
    assets/brand/SMR.png es el asset oficial del propietario. Si el archivo
    aún no está en el repo, el <img> permanece oculto y el wordmark mantiene
    la identidad (el logo no se sustituye ni se reinventa). */
+.sidebar-brand { padding: var(--sp-5) var(--sp-5) var(--sp-4); } /* FASE 7.1: en escala */
 .brand-link {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-2);
   font-weight: 700;
   font-size: 15.5px;
   letter-spacing: -0.02em;
@@ -90,7 +91,7 @@ html[data-theme='dark'] {
 .hero::before {
   content: '';
   position: absolute;
-  inset: 0 0 14px;
+  inset: 0 0 var(--sp-4);
   background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
   background-size: 22px 22px;
   opacity: 0.3;
@@ -102,9 +103,9 @@ html[data-theme='dark'] {
 .hero-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2);
   width: fit-content;
-  padding: 4px 11px;
+  padding: var(--sp-1) var(--sp-3);
   border: 1px solid var(--accent-border);
   border-radius: var(--radius-full);
   background: var(--accent-soft);
@@ -163,7 +164,7 @@ table tbody tr:hover { background: var(--hover); }
   border-radius: 2px;
   background: var(--border);
 }
-.timeline li { position: relative; padding: 0 0 14px 26px; }
+.timeline li { position: relative; padding: 0 0 var(--sp-4) 26px; }
 .timeline li:last-child { padding-bottom: 2px; }
 .timeline li::before {
   content: '';
@@ -183,14 +184,14 @@ table tbody tr:hover { background: var(--hover); }
 .empty {
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius-lg);
-  padding: 30px 22px;
+  padding: var(--sp-6) var(--sp-5);
 }
 .empty .icon {
   width: 44px;
   height: 44px;
   display: grid;
   place-items: center;
-  margin: 0 auto 12px;
+  margin: 0 auto var(--sp-3);
   border-radius: 12px;
   background: var(--accent-soft);
   color: var(--accent);
@@ -264,7 +265,7 @@ table tbody tr:hover { background: var(--hover); }
 
 .path-arrow {
   display: block;
-  margin: 2px 0 6px 13px;
+  margin: var(--sp-1) 0 var(--sp-2) 13px; /* 13px: centra la flecha bajo el nodo de 26px */
   color: var(--text-2);
   opacity: 0.6;
   font-size: 13px;
@@ -272,9 +273,9 @@ table tbody tr:hover { background: var(--hover); }
 
 .path-step {
   display: flex;
-  gap: 10px;
+  gap: var(--sp-3);
   list-style: none;
-  padding: 8px 0;
+  padding: var(--sp-2) 0;
 }
 
-.path-steps { margin: 14px 0 0; padding: 0; }
+.path-steps { margin: var(--sp-4) 0 0; padding: 0; }
