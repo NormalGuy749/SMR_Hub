@@ -30,8 +30,7 @@ html[data-theme='dark'] {
 /* ----- Marca: logo oficial + wordmark (Fase C) -----
    assets/brand/SMR.png es el asset oficial del propietario. Si el archivo
    aún no está en el repo, el <img> permanece oculto y el wordmark mantiene
-   la identidad. El prefijo "~/ " evoca ruta de shell: toque técnico sutil,
-   solo tipografía (no sustituye ni reinventa el logo). */
+   la identidad (el logo no se sustituye ni se reinventa). */
 .brand-link {
   display: inline-flex;
   align-items: center;
@@ -52,12 +51,6 @@ html[data-theme='dark'] {
 /* app.css pinta un cuadrado decorativo en ::before del brand (markup antiguo
    pre-fase 7): se anula para que el wordmark y el logo oficial no compitan. */
 .brand-link::before { content: none; }
-.brand-word::before {
-  content: '~/ ';
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--accent);
-}
 .brand-link:hover .brand-word { color: var(--accent); }
 
 /* ----- Sidebar: jerarquía por áreas (Fase D) ----- */
