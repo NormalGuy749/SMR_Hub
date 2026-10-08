@@ -93,5 +93,16 @@
   <script src="js/tests.js" defer></script>
   <script src="js/profile.js" defer></script>
   <script src="js/app.js" defer></script>
+
+  <!-- Fase 8.2: Auth de Supabase. Orden de ejecución garantizado por defer:
+       SDK CDN → cloud-config (globals públicos) → supabase.js (cliente)
+       → auth.js (UI/estado). Si el CDN falla o no hay red, la app sigue
+       siendo 100% local: el visitante estudia sin Supabase. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script defer src="js/cloud-config.js"></script>
+  <script defer src="js/supabase.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/cloud-profile.js"></script>
+  <script defer src="js/cloud-progress.js"></script>
 </body>
 </html>

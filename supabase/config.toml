@@ -1,0 +1,46 @@
+# SMR Hub — Supabase Foundation (fase 8.1)
+# Configuración local del CLI de Supabase. Este archivo NO contiene
+# credenciales: solo referencias y flags de proyecto.
+#
+# Credenciales públicas del cliente (project URL + anon key):
+#   → variables públicas de Cloudflare Pages (SMR_SUPABASE_URL,
+#     SMR_SUPABASE_ANON_KEY) o config.js local. NUNCA service_role.
+#
+# La app NO las requiere para arrancar (visitante local-first intacto).
+
+project_id = "smr-hub"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[auth]
+enabled = true
+site_url = "http://localhost:8742"
+additional_redirect_urls = ["https://smr-hub.pages.dev"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+enable_signup = true
+
+# NOTA: Auth functionality (UI/flows) se implementa en la fase 8.2;
+# esta sección queda como configuración base del proyecto local.
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"

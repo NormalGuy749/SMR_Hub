@@ -12,6 +12,11 @@ auditor.js
 # Local / environment files
 .freebuff
 
+# Secrets belong in Infisical, never on disk. Keep any local env file out of git.
+.env
+.env.*
+!.env.example
+
 # Dependencies
 node_modules/
 

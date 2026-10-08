@@ -1656,6 +1656,58 @@ a.link-row:hover,
   letter-spacing: var(--tracking-tight);
 }
 
+/* ---- 10b. Autenticación (fase 8.2) ---- */
+
+.auth-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.auth-nav-item .nav-link {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.auth-nav-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.auth-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth-msg {
+  margin-top: var(--sp-3);
+}
+
+.auth-msg-error {
+  color: var(--bad, #e03131);
+}
+
+.auth-modal .field-wrap {
+  margin-bottom: var(--sp-3);
+}
+
+.auth-modal form .btn {
+  width: 100%;
+}
+
+.auth-modal .modal-title {
+  margin-bottom: var(--sp-4);
+}
+
 @keyframes smr-fade {
   from { opacity: 0; }
   to { opacity: 1; }
