@@ -675,6 +675,18 @@ html[data-theme='dark'] .btn-primary { color: #0b1220; }
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+/* ----- Quitar del repaso (fase 8.5.9) ----- */
+
+.srs-drop-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.srs-drop-status { margin: 0; }
+
 /* ----- Navegación Anterior / Siguiente en el modal de recurso ----- */
 
 .res-nav {

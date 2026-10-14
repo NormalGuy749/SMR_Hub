@@ -63,7 +63,7 @@
           <div class="search" id="search" role="search">
             <span class="search-icon" id="search-icon" aria-hidden="true"></span>
             <input type="search" class="input search-input" id="search-input"
-                   placeholder="Buscar" aria-label="Buscar" autocomplete="off" spellcheck="false">
+                  placeholder="Buscar" aria-label="Buscar" autocomplete="off" spellcheck="false">
             <div class="search-results" id="search-results" hidden></div>
           </div>
           <button class="icon-btn palette-btn" id="palette-btn" type="button"
@@ -77,7 +77,7 @@
   </div>
 
   <!-- Fase 5.6: navegación inferior para pantallas pequeñas.
-       No sustituye al sidebar: se muestra únicamente por debajo de 860px. -->
+      No sustituye al sidebar: se muestra únicamente por debajo de 860px. -->
   <nav class="mobile-nav" id="mobile-nav" aria-label="Navegación principal"></nav>
 
   <script src="js/data.js" defer></script>
@@ -95,9 +95,9 @@
   <script src="js/app.js" defer></script>
 
   <!-- Fase 8.2: Auth de Supabase. Orden de ejecución garantizado por defer:
-       SDK CDN → cloud-config (globals públicos) → supabase.js (cliente)
-       → auth.js (UI/estado). Si el CDN falla o no hay red, la app sigue
-       siendo 100% local: el visitante estudia sin Supabase. -->
+      SDK CDN → cloud-config (globals públicos) → supabase.js (cliente)
+      → auth.js (UI/estado). Si el CDN falla o no hay red, la app sigue
+      siendo 100% local: el visitante estudia sin Supabase. -->
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script defer src="js/cloud-config.js"></script>
   <script defer src="js/supabase.js"></script>

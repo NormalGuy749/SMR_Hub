@@ -52,6 +52,41 @@ SMR.store = {
   },
   remove(key) {
     try { localStorage.removeItem(STORE_PREFIX + key); } catch { /* sin almacenamiento */ }
+  },
+
+  /* ---------- 8.5.13: escritura compartida entre PESTAÑAS ----------
+     Varias pestañas del mismo origen comparten localStorage. Guardar el
+     objeto completo desde la copia en memoria de una pestaña descarta lo que
+     otra acaba de guardar (pérdida de actualización independiente).
+     `written` guarda, por clave, la última versión que ESTA pestaña leyó o
+     escribió (la base); `writeMerged` aplica SOLO los cambios de esta pestaña
+     sobre la base y toma del store lo que no cambió aquí, de modo que los
+     cambios independientes de otra pestaña sobreviven. No inventa semántica
+     por dominio: si las dos pestañas tocan el MISMO valor, gana esta pestaña
+     (mismo comportamiento que un guardado completo) y el merge con la nube
+     sigue siendo el árbitro por dominio. `other` es la copia ajena a fusionar;
+     null = no fusionar (lo usa cloud-progress cuando el slot vivo pertenece a
+     otro propietario, para no mezclar dos cuentas). */
+  written: {},
+  /* Al ARRANCAR, o al volver a adoptar el slot vivo, esta pestaña conoce el
+     estado actual: esa es su base de fusión. Sin base, el primer guardado de
+     cada pestaña no puede distinguir lo suyo de lo ajeno y lo pisaría todo. */
+  readBase(key) {
+    const v = this.get(key, null);
+    this.written[key] = deepCopy(v);
+    return v;
+  },
+  writeMerged(key, data, other) {
+    const base = this.written[key];
+    const theirs = other === undefined ? this.get(key, null) : other;
+    /* base === undefined → esta pestaña nunca leyó la clave: no se fusiona.
+       base === null → la leyó y estaba ausente: se fusiona contra vacío. */
+    if (theirs !== null && base !== undefined && !deepEqual(base, theirs)) {
+      slotApply(data, slotMergeValue('', base, data, theirs));
+    }
+    this.written[key] = deepCopy(data);
+    this.set(key, data);
+    return data;
   }
 };
 
@@ -123,7 +158,7 @@ const dom = {
 
 const SETTINGS_DEFAULTS = { theme: null, textSize: 'md', animations: true };
 
-SMR.settings = Object.assign({}, SETTINGS_DEFAULTS, SMR.store.get('settings', {}));
+SMR.settings = Object.assign({}, SETTINGS_DEFAULTS, SMR.store.readBase('settings') || {});
 
 const mediaDark = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -142,7 +177,7 @@ function applySettings() {
 }
 
 function saveSettings() {
-  SMR.store.set('settings', SMR.settings);
+  SMR.store.writeMerged('settings', SMR.settings);
 }
 
 function updateThemeButton() {
@@ -174,7 +209,7 @@ try {
 /* ---------- Favoritos ---------- */
 
 SMR.favorites = {
-  data: SMR.store.get('favorites', {}),
+  data: SMR.store.readBase('favorites') || {},
   has(kind, id) {
     return !!(this.data[kind] && this.data[kind][id]);
   },
@@ -182,7 +217,7 @@ SMR.favorites = {
     if (!this.data[kind]) this.data[kind] = {};
     if (this.data[kind][id]) delete this.data[kind][id];
     else this.data[kind][id] = true;
-    SMR.store.set('favorites', this.data);
+    SMR.store.writeMerged('favorites', this.data);
     return this.has(kind, id);
   }
 };
@@ -225,6 +260,101 @@ const SRS_INTERVALS = [1, 1, 3, 7, 14, 30];
 const SRS_MAX_LEVEL = SRS_INTERVALS.length - 1;
 const ACTIVITY_LIMIT = 40;
 const HISTORY_LIMIT = 60;
+
+/* ---------- 8.5.13: fusión de escrituras entre pestañas ---------- */
+
+/* Listas acumulativas: se unen por entrada en vez de sustituirse.
+   `path` es la ruta real desde la raíz del objeto de progreso. Las listas no
+   listadas (studySessions, etc.) mantienen la semántica ya establecida. */
+const SLOT_ARRAYS = {
+  activity: { key: (x) => x && (x.ts + '\u0000' + x.type + '\u0000' + x.label + '\u0000' + x.meta), sort: (a, b) => (a.ts || 0) - (b.ts || 0), limit: ACTIVITY_LIMIT },
+  'tests.history': { key: (x) => x && (x.ts + '\u0000' + x.mode + '\u0000' + x.testId + '\u0000' + x.score), sort: (a, b) => (a.ts || 0) - (b.ts || 0), limit: HISTORY_LIMIT }
+};
+
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => deepEqual(v, b[i]));
+  }
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEqual(a[k], b[k]));
+}
+
+/* Copia JSON: estos datos cruzan localStorage como JSON, así que un objeto se
+   copia exactamente igual (y sin ciclos). */
+function deepCopy(v) {
+  return v === undefined ? v : JSON.parse(JSON.stringify(v));
+}
+
+function slotMergeArray(spec, mine, theirs) {
+  const seen = new Set(mine.map(spec.key));
+  const merged = mine.concat(theirs.filter((item) => !seen.has(spec.key(item))));
+  merged.sort(spec.sort);
+  return merged.length > spec.limit ? merged.slice(-spec.limit) : merged;
+}
+
+/* Fusiona `mine` (esta pestaña) con `theirs` (store / otra pestaña) tomando
+   `base` como última versión conocida. Solo toca lo que las dos partes
+   cambiaron respecto de la base. */
+function slotMergeValue(path, base, mine, theirs) {
+  if (deepEqual(mine, theirs)) return mine;      /* mismo contenido */
+  if (deepEqual(mine, base)) return theirs;      /* aquí no se tocó */
+  if (deepEqual(theirs, base)) return mine;      /* solo se tocó aquí */
+  const spec = SLOT_ARRAYS[path];
+  if (spec && Array.isArray(mine) && Array.isArray(theirs)) return slotMergeArray(spec, mine, theirs);
+  if (isPlainObject(mine) && isPlainObject(theirs)) return slotMergeObject(path, base, mine, theirs);
+  return mine;                                   /* las dos lo cambiaron: gana esta pestaña */
+}
+
+function slotMergeObject(path, base, mine, theirs) {
+  const b = isPlainObject(base) ? base : {};
+  const out = {};
+  const keys = new Set(Object.keys(mine).concat(Object.keys(theirs)));
+  keys.forEach((k) => {
+    const inMine = Object.prototype.hasOwnProperty.call(mine, k);
+    const inTheirs = Object.prototype.hasOwnProperty.call(theirs, k);
+    if (!inMine) {
+      /* Borrado aquí: se aplica salvo que la otra pestaña lo haya cambiado
+         después de la base (entonces ese valor nuevo sobrevive). */
+      if (inTheirs && !deepEqual(theirs[k], b[k])) out[k] = theirs[k];
+      return;
+    }
+    if (!inTheirs) {
+      /* Borrado en la OTRA pestaña (ya no está en el slot): gana el borrado
+         salvo que aquí se haya cambiado el valor desde la base. Sin esto, una
+         copia vieja resucitaría lo que la otra acaba de borrar. */
+      if (!deepEqual(mine[k], b[k])) out[k] = mine[k];
+      return;
+    }
+    out[k] = slotMergeValue(path ? path + '.' + k : k, b[k], mine[k], theirs[k]);
+  });
+  return out;
+}
+
+/* Vuelca `source` sobre `target` conservando la identidad de los objetos y
+   arrays que ya existían (el store solo debe sustituir lo que cambie). */
+function slotApply(target, source) {
+  Object.keys(source).forEach((k) => {
+    const v = source[k];
+    const cur = target[k];
+    if (isPlainObject(v) && isPlainObject(cur)) slotApply(cur, v);
+    /* copia antes de vaciar: `v` puede ser la MISMA referencia que `cur`
+       (el merge devuelve el array propio cuando solo lo tocó esta pestaña) */
+    else if (Array.isArray(v) && Array.isArray(cur)) { const copy = v.slice(); cur.length = 0; copy.forEach((x) => cur.push(x)); }
+    else target[k] = v;
+  });
+  Object.keys(target).forEach((k) => {
+    if (!Object.prototype.hasOwnProperty.call(source, k)) delete target[k];
+  });
+}
 
 function dayKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -376,9 +506,14 @@ function sanitizeProgress(raw) {
 }
 
 SMR.progress = {
-  data: sanitizeProgress(SMR.store.get(PROGRESS_KEY, null)),
+  data: sanitizeProgress(SMR.store.readBase(PROGRESS_KEY)),
 
-  save() { SMR.store.set(PROGRESS_KEY, this.data); },
+  /* otherSlot() devuelve la copia ajena a fusionar (null = no fusionar);
+     cloud-progress lo sustituye para no fusionar cuando el slot vivo es de
+     otro propietario. Sin ese módulo, la fusión entre pestañas sigue activa. */
+  otherSlot() { return SMR.store.get(PROGRESS_KEY, null); },
+
+  save() { SMR.store.writeMerged(PROGRESS_KEY, this.data, this.otherSlot()); },
 
   /* --- Recursos --- */
 
@@ -636,6 +771,7 @@ SMR.progress = {
   clear() {
     this.data = defaultProgress();
     SMR.store.remove(PROGRESS_KEY);
+    delete SMR.store.written[PROGRESS_KEY]; /* 8.5.13: sin base, el borrado no se fusiona */
   }
 };
 

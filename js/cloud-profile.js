@@ -58,6 +58,7 @@
   const runtime = {
     currentUser: null,
     syncing: false,
+    initialSyncFor: null, /* uid con sync inicial ya programado (8.4.1, A2) */
     pushTimer: null,
     lastPushed: null      /* snapshot normalizado del último estado enviado/aceptado */
   };
@@ -165,24 +166,38 @@
 
   function initialSync(user) {
     if (!user) return Promise.resolve();
-    if (runtime.syncing) return syncChain;
-    runtime.syncing = true;
     runtime.currentUser = user;
+    /* 8.4.1 (A2): guard POR USUARIO — antes un cambio de cuenta a mitad
+       de sync descartaba para siempre el sync inicial de la cuenta nueva. */
+    if (runtime.initialSyncFor === user.id) return syncChain;
+    runtime.initialSyncFor = user.id;
+    runtime.syncing = true;
     return enqueue(async () => {
-      if (runtime.currentUser !== user) return;
-      const local = SMR.profile.read();
-      const cloud = await fetchOwnProfile(user.id);
+      try {
+        if (runtime.currentUser !== user) return; /* logout a mitad: nada */
+        const local = SMR.profile.read();
+        const cloud = await fetchOwnProfile(user.id);
 
-      if (runtime.currentUser !== user) return; /* logout durante el fetch */
+        if (runtime.currentUser !== user) return; /* logout durante el fetch */
 
-      /* POLÍTICA DETERMINISTA (ver cabecera del módulo). */
-      if (localConfigured(local)) {
-        await pushProfile(local);                 /* 1: gana LOCAL */
-      } else if (cloudHasData(cloud)) {
-        await pullProfile(cloud);                 /* 2: gana CLOUD */
-      }                                            /* 3: no-op */
-
-      runtime.syncing = false;
+        /* POLÍTICA DETERMINISTA (ver cabecera del módulo). */
+        if (localConfigured(local)) {
+          await pushProfile(local);                 /* 1: gana LOCAL */
+        } else if (cloudHasData(cloud)) {
+          await pullProfile(cloud);                 /* 2: gana CLOUD */
+        }                                            /* 3: no-op */
+      } catch (err) {
+        if (global.console && global.console.warn) {
+          global.console.warn('[SMR cloud-profile] initialSync:', err && err.message ? err.message : err);
+        }
+      } finally {
+        /* 8.4.1 (A2): SIEMPRE se libera el flag — antes un early-return
+           (cambio de cuenta/logout a mitad de sync) lo dejaba bloqueado y
+           la siguiente sesión jamás volvía a sincronizar. Solo el job del
+           usuario actual lo limpia (el flag puede pertenecer ya al de la
+           cuenta nueva). */
+        if (runtime.initialSyncFor === user.id) runtime.syncing = false;
+      }
       runPendingPush();
     });
   }
@@ -224,6 +239,11 @@
     wired = true;
     global.addEventListener('smr:authchange', (event) => {
       const user = event.detail && event.detail.user;
+      /* 8.4.2 (M-1): el snapshot de profile por dueño lo gestiona
+         cloud-progress.js (slot conjunto SMR.store 'studentProfile'),
+         que ya se archiva/restaura en el swap de cuenta. Aquí solo se
+         resetea el estado runtime para no mezclar lastPushed del dueño
+         anterior con el push del nuevo. */
       if (user) {
         if (runtime.currentUser !== user) {
           runtime.currentUser = user;
@@ -231,10 +251,12 @@
           initialSync(user);
         }
       } else {
-        /* SIGNED_OUT: el local se conserva íntegro; solo se resetea el
-           estado runtime de la sincronización. */
+        /* 8.4.1 (A2): SIGNED_OUT resetea TODO el estado runtime (flags
+           incluidos) para que la próxima cuenta arranque limpia y con
+           sync inicial fresco. El local se conserva íntegro. */
         runtime.currentUser = null;
         runtime.syncing = false;
+        runtime.initialSyncFor = null;
         runtime.lastPushed = null;
         if (runtime.pushTimer) { clearTimeout(runtime.pushTimer); runtime.pushTimer = null; }
       }

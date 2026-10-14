@@ -56,6 +56,10 @@ window.SMR_TESTS = (function () {
   /* ---------- Sesión ---------- */
 
   let session = null;
+  /* 8.5.10: aviso de un solo uso del repaso SRS (se consume al pintar la
+     siguiente pregunta, para que el resultado del borrado no se pierda
+     con el repintado de la pantalla). */
+  let srsNotice = '';
   /* { testId, title, mode, questions, index, correct, answers, cfg, remaining,
      intervalId, multi, strict, startedAt, timeSpent, examFilter } */
 
@@ -556,6 +560,8 @@ window.SMR_TESTS = (function () {
   function renderQuestion(root) {
     const s = session;
     const c = s.questions[s.index];
+    const notice = srsNotice;
+    srsNotice = ''; /* de un solo uso */
     const q = c.q;
     const total = s.adaptive ? s.adaptive.total : s.questions.length;
     const answered = s.index;
@@ -573,6 +579,7 @@ window.SMR_TESTS = (function () {
           <p class="quiz-score">${isExam ? 'Sin pistas hasta el final' : `Aciertos: ${s.correct}`}</p>
         </div>
         <p class="quiz-mode">${esc(s.cfg.label)}${s.multi ? ` · ${esc(c.testTitle || '')}` : ` · ${esc(s.title)}`} · <span class="quiz-diff">${esc(difficultyOf(q))}</span>${lvl !== null ? ` · <span class="quiz-diff">nivel ${lvl + 1}/3</span>` : ''}</p>
+        ${notice ? `<p class="notice" role="status">${esc(notice)}</p>` : ''}
         <div class="quiz-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Progreso del test">
           <div class="quiz-progress-fill" style="width: ${pct}%"></div>
         </div>
@@ -587,6 +594,7 @@ window.SMR_TESTS = (function () {
         <div class="quiz-actions">
           <button type="button" class="btn btn-primary" id="quiz-next" hidden>${s.index + 1 === total ? 'Ver resultado' : 'Siguiente pregunta'}</button>
         </div>
+        ${s.mode === 'srs' ? `<div data-srs-test="${esc(c.testId)}" data-srs-index="${c.origIndex}">${srsDropHtml(c.testId, c.origIndex)}</div>` : ''}
       </div>`;
 
     if (showTimer) updateTimerEl();
@@ -644,6 +652,11 @@ window.SMR_TESTS = (function () {
       if (!link) return;
       window.SMR.openResource(link.dataset.reviewRes);
     });
+
+    /* 8.5.10: quitar del repaso la tarjeta que se está viendo (mismo
+       contrato y misma confirmación que 8.5.9; el avance lo decide
+       advanceAfterSrsDrop). */
+    if (s.mode === 'srs') wireSrsDrop(root, (testId, origIndex, message) => advanceAfterSrsDrop(root, testId, origIndex, message));
 
     nextBtn.addEventListener('click', () => {
       if (s.adaptive) {
@@ -757,9 +770,13 @@ window.SMR_TESTS = (function () {
     const recommendations = recommendationsFor(s.answers);
     const best = s.multi ? null : progress().bestScoreFor(s.testId);
 
+    const srsMod = window.SMR.srs || null;
     const review = s.questions.map((c) => {
       const answer = s.answers.find((a) => a.question === c);
       const q = c.q;
+      /* test de ORIGEN: en sesiones multi cada pregunta lleva su test;
+         en sesión simple es s.testId. origIndex es la posición en ese test. */
+      const srsTest = s.multi ? (c.testId || s.testId) : s.testId;
       const ok = answer ? answer.ok : false;
       const chosenText = answer ? q.options[answer.chosen] : null;
       const wrongWhy = (!ok && answer && q.wrongWhy && q.wrongWhy[answer.chosen])
@@ -779,6 +796,7 @@ window.SMR_TESTS = (function () {
           ${wrongWhy}
           <p class="review-ex">${esc(q.explain)}</p>
           ${resLink}
+          ${srsRateHtml(srsTest, c.origIndex) ? `<div data-srs-test="${esc(srsTest)}" data-srs-index="${c.origIndex}">${srsRateHtml(srsTest, c.origIndex)}${srsDropHtml(srsTest, c.origIndex)}</div>` : ''}
         </li>`;
     }).join('');
 
@@ -853,6 +871,8 @@ window.SMR_TESTS = (function () {
     root.querySelectorAll('[data-review-res]').forEach((btn) => {
       btn.addEventListener('click', () => window.SMR.openResource(btn.dataset.reviewRes));
     });
+    wireSrsRating(root);
+    wireSrsDrop(root);
 
     root.querySelector('#quiz-retry').addEventListener('click', () => {
       if (s.mode === 'examen') {
@@ -884,7 +904,208 @@ window.SMR_TESTS = (function () {
     root.querySelector('#quiz-back').addEventListener('click', () => renderIndex(root));
   }
 
-  /* ---------- Autoevaluación SRS tras responder (en modos de repaso) ---------- */
+  /* 8.5.4-C: autoevaluación SRS en la lista de revisión del resultado.
+     La valoración (0 «No lo sabía» / 1 «Dudé» / 2 «Lo sabía») es la
+     percepción del usuario: NUNCA se deduce de acierto/fallo. Solo se
+     muestra si SMR.srs.idOf resuelve la identidad estable de la pregunta
+     (con el test de ORIGEN en sesiones multi); si no hay identidad no se
+     muestran controles que puedan crear claves posicionales inválidas.
+     Llama a la función existente SMR.progress.scheduleSrs(testId,
+     origIndex, rate), ya conectada a la sincronización cloud (push RPC
+     merge_srs_cards vía snapshotProgress; fix 8.5.4-B1). */
+  const SRS_RATE_LABELS = ['No lo sabía', 'Dudé', 'Lo sabía'];
+
+  /* Rate actual de la pregunta en tests.srs (o null si no tiene). */
+  function srsRateOf(testId, origIndex) {
+    const srs = progress().data.tests.srs;
+    const key = window.SMR.srs && SMR.srs.idOf(testId, origIndex);
+    if (!key) return { key: null, level: null };
+    const entry = srs[key];
+    return { key, level: entry && typeof entry.level === 'number' ? entry.level : null };
+  }
+
+  /* HTML de la fila de valoración para un elemento de review.
+     Sin identidad estable: hilo vacío (no se puede crear tarjeta). */
+  function srsRateHtml(testId, origIndex) {
+    if (!window.SMR.srs || typeof window.SMR.srs.idOf !== 'function') return '';
+    const { key, level } = srsRateOf(testId, origIndex);
+    if (!key) return '';
+    const current = level === null ? null : Math.min(2, Math.max(0, level));
+    const btns = SRS_RATE_LABELS.map((label, i) =>
+      `<button type="button" class="btn btn-sm self-btn${current === i ? ' active' : ''}" data-srs-rate="${i}"`
+        + ` aria-pressed="${current === i}" aria-label="${esc(label)} (valoración SRS)">${esc(label)}</button>`).join('');
+    return `<div class="self-check-row review-srs-rate" role="group" aria-label="Valoración SRS">${btns}</div>`;
+  }
+
+  /* 8.5.9: quitar una tarjeta del repaso (borrado SRS).
+     La UI solo confirma y llama al dropSrs real: el borrado es local e
+     inmediato y la propagación remota (tombstone) la resuelve
+     cloud-progress con su marca pending y la RPC; aquí no se toca ni el
+     SRS ni esa marca. El mensaje nunca promete borrado remoto inmediato.
+     Sin identidad estable no hay tarjeta que quitar (fila vacía). */
+  function srsDropHtml(testId, origIndex) {
+    const { key, level } = srsRateOf(testId, origIndex);
+    if (!key) return '';
+    return `<div class="srs-drop-row">
+      <button type="button" class="btn btn-sm btn-danger" data-srs-drop${level === null ? ' hidden' : ''}
+              aria-label="Quitar esta pregunta del repaso espaciado">${icon('x', 14)} Quitar del repaso</button>
+      <p class="hint-inline srs-drop-status" role="status"></p>
+    </div>`;
+  }
+
+  /* Texto de la pregunta para la confirmación: el usuario confirma sobre
+     la tarjeta que ve, no sobre una posición. */
+  function srsCardTitle(testId, origIndex) {
+    const test = findTest(testId);
+    const q = test && test.questions[origIndex];
+    return q ? q.q : '';
+  }
+
+  function srsDropConfirmHtml(title) {
+    return `
+      <div class="modal-head">
+        <div>
+          <h3 class="modal-title">Quitar del repaso</h3>
+          <p class="modal-meta">Repetición espaciada</p>
+        </div>
+        <button type="button" class="icon-btn modal-close" aria-label="Cerrar">${icon('x')}</button>
+      </div>
+      ${title ? `<p class="modal-desc">${esc(title)}</p>` : ''}
+      <p class="hint-inline">Se quitará de tu repaso programado. La pregunta del banco y tu historial no cambian.</p>
+      <div class="modal-foot">
+        <button type="button" class="btn" data-srs-cancel>Cancelar</button>
+        <button type="button" class="btn btn-danger" data-srs-confirm>Quitar del repaso</button>
+      </div>`;
+  }
+
+  /* Confirmación con el modal del design system (foco atrapado, Escape y
+     cierre por overlay ya resueltos en SMR.modal). Cancelar no toca nada. */
+  function openSrsDropConfirm(testId, origIndex, onResult) {
+    window.SMR.modal.open((box) => {
+      box.innerHTML = srsDropConfirmHtml(srsCardTitle(testId, origIndex));
+      box.querySelector('.modal-close').addEventListener('click', window.SMR.modal.close);
+      box.querySelector('[data-srs-cancel]').addEventListener('click', window.SMR.modal.close);
+      const confirm = box.querySelector('[data-srs-confirm]');
+      confirm.addEventListener('click', () => {
+        confirm.disabled = true; /* un solo borrado por confirmación */
+        let error = null;
+        try {
+          progress().dropSrs(testId, origIndex);
+        } catch (err) {
+          error = err;
+        }
+        window.SMR.modal.close();
+        onResult(error);
+      }, { once: true });
+    });
+  }
+
+  /* Refresco local tras el borrado: la tarjeta ya no existe, así que la
+     acción se oculta y el rate vuelve a "sin valorar" (re-valorar es el
+     revive explícito); si el borrado falla, la acción sigue disponible. */
+  /* 8.5.10: avance determinista del repaso SRS tras quitar la tarjeta
+     actual. La tarjeta sale del conjunto (y su respuesta, si ya la había
+     dado, para que los totales del resultado no cuenten una pregunta que
+     ya no está); el índice queda apuntando a la siguiente sin saltarse
+     ninguna ni repetirla. Si era la última, el repaso termina. */
+  function advanceAfterSrsDrop(root, testId, origIndex, message) {
+    const s = session;
+    if (!s || s.mode !== 'srs') return;
+    const at = s.questions.findIndex((q) => q.testId === testId && q.origIndex === origIndex);
+    if (at < 0) return; /* ya no está en el repaso: nada que avanzar */
+    const card = s.questions[at];
+    const ansAt = s.answers.findIndex((a) => a.question === card);
+    if (ansAt >= 0) {
+      if (s.answers[ansAt].ok) s.correct -= 1;
+      s.answers.splice(ansAt, 1);
+    }
+    s.questions.splice(at, 1);
+    if (!s.questions.length) { /* se quedó sin repasos: estado vacío ya existente */
+      stop();
+      session = null;
+      renderIndex(root, 'No hay repasos vencidos hoy. Vuelve cuando venzan.');
+      return;
+    }
+    if (at >= s.questions.length) { srsNotice = ''; renderResult(root); return; } /* era la última: el repaso acaba */
+    srsNotice = message || ''; /* el aviso viaja a la siguiente pantalla */
+    renderQuestion(root);
+  }
+
+  function syncSrsDrop(wrapper, testId, origIndex) {
+    if (!wrapper) return;
+    const drop = wrapper.querySelector('[data-srs-drop]');
+    const status = wrapper.querySelector('.srs-drop-status');
+    if (drop) {
+      const { key, level } = srsRateOf(testId, origIndex);
+      drop.hidden = !key || level === null;
+      if (!drop.hidden) drop.disabled = false;
+    }
+    if (status) status.textContent = '';
+  }
+
+  function setSrsDropStatus(wrapper, message) {
+    const status = wrapper && wrapper.querySelector('.srs-drop-status');
+    if (status) status.textContent = message;
+  }
+
+  /* Wiring: un listener por render (nunca once: el botón vuelve a estar
+     disponible si la tarjeta revive). El modal abierto impide un segundo
+     borrado, y la confirmación se deshabilita al pulsarla una vez. */
+  function wireSrsDrop(root, onDeleted) {
+    root.querySelectorAll('[data-srs-drop]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const wrapper = btn.closest('[data-srs-test]');
+        if (!wrapper) return;
+        const testId = wrapper.dataset.srsTest;
+        const origIndex = Number(wrapper.dataset.srsIndex);
+        if (!testId || !Number.isInteger(origIndex)) return;
+        openSrsDropConfirm(testId, origIndex, (error) => {
+          if (error) {
+            btn.disabled = false; /* reintentable */
+            setSrsDropStatus(wrapper, 'No se pudo quitar del repaso. Inténtalo de nuevo.');
+            return;
+          }
+          wrapper.querySelectorAll('[data-srs-rate]').forEach((b) => {
+            b.classList.remove('active');
+            b.setAttribute('aria-pressed', 'false');
+          });
+          syncSrsDrop(wrapper, testId, origIndex);
+          const signedIn = !!(window.SMR.auth && typeof window.SMR.auth.isSignedIn === 'function' && window.SMR.auth.isSignedIn());
+          const message = signedIn
+            ? 'Quitada del repaso. Se sincronizará con tu cuenta.'
+            : 'Quitada del repaso en este dispositivo.';
+          setSrsDropStatus(wrapper, message);
+          if (typeof onDeleted === 'function') onDeleted(testId, origIndex, message);
+        });
+      });
+    });
+  }
+
+  /* Wiring: un listener delegado por render; cada clic registra UNA
+     valoración (scheduleSrs es idempotente por PK question_key) y
+     actualiza el estado visual del grupo. Re-valorar sobrescribe la
+     entrada { level, due } de la tarjeta (semántica real de
+     scheduleSrs: el nivel se ajusta relativo al actual y la due se
+     recalcula — no hay doble registro ni conflicto de persistencia). */
+  function wireSrsRating(root) {
+    if (!window.SMR.srs) return;
+    root.querySelectorAll('[data-srs-rate]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const li = btn.closest('[data-srs-test]');
+        if (!li) return;
+        const rate = Number(btn.dataset.srsRate);
+        if (![0, 1, 2].includes(rate)) return;
+        progress().scheduleSrs(li.dataset.srsTest, Number(li.dataset.srsIndex), rate);
+        li.querySelectorAll('[data-srs-rate]').forEach((b) => {
+          const active = Number(b.dataset.srsRate) === rate;
+          b.classList.toggle('active', active);
+          b.setAttribute('aria-pressed', String(active));
+        });
+        /* la tarjeta ya existe (o revive): la acción de quitar vuelve */
+        syncSrsDrop(li, li.dataset.srsTest, Number(li.dataset.srsIndex));
+      }, { once: true });
+    });
+  }
 
   /* ---------- Página de tests ---------- */
 
