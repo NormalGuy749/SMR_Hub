@@ -121,6 +121,22 @@ function makeLocks(opts) {
 
 /* ---------- una pestaña = un contexto JS con el código real ---------- */
 
+function makeSharedLocks() {
+  let held = false;
+  const queue = [];
+  function pump() {
+    if (held || !queue.length) return;
+    const e = queue.shift();
+    held = true;
+    Promise.resolve().then(e.cb).then(
+      () => { held = false; e.resolve(); pump(); },
+      () => { held = false; e.resolve(); pump(); }
+    );
+  }
+  return { request(name, cb) { return new Promise((resolve) => { queue.push({ cb, resolve }); pump(); }); } };
+}
+const SHARED_LOCKS = makeSharedLocks();
+
 function makeTab(bus, opts) {
   const o = opts || {};
   const listeners = {};
@@ -155,7 +171,10 @@ function makeTab(bus, opts) {
   const g = {
     console: { log() {}, warn() {}, error() {}, info() {} },
     localStorage: lsView,
-    navigator: o.locks ? { locks: o.locks } : {},
+    /* 8.6.3: la transición de slots exige EXCLUSIÓN (fail-closed): sin lock ya
+       no se ejecuta. SHARED_LOCKS es un FIFO compartido por las pestañas del
+       archivo, para que la suite siga ejerciendo la serialización. */
+    navigator: o.locks ? { locks: o.locks } : { locks: SHARED_LOCKS },
     addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
     dispatchEvent(ev) { (listeners[ev.type] || []).slice().forEach((fn) => fn(ev)); return true; },
     setTimeout, clearTimeout
@@ -560,27 +579,26 @@ function seedAccount(bus, uid, progressObj) {
   })();
   record('dos transiciones concurrentes: serializadas por el lock, sin mezclar propietarios');
 
-  /* 12. LOCK RECHAZADO: se ejecuta sin exclusión (8.5.12) y se observa el estado. */
+  /* 12. LOCK RECHAZADO: FAIL-CLOSED (8.6.3) — sin exclusión NO se ejecuta. */
   await (async () => {
     const rejected = makeLocks({ reject: 'documento no activo (bfcache)' });
     const bus = makeBus();
     bus.seed(P + 'liveOwner', JSON.stringify({ owner: '__guest__', v: 1 }));
     bus.seed(P + 'progress', JSON.stringify(progressWith({ completed: { 'r-vis': 7 } })));
     const t1 = makeTab(bus, { locks: rejected });
-    const t2 = makeTab(bus, {});
     t1.auth(user(UID_A));
-    t2.auth(user(UID_A));
     await flush();
-    const snapG = t1.snapshot('__guest__');
-    assert(snapG && snapG.slot.progress.resources.completed['r-vis'] !== undefined,
-      'con el lock rechazado la transición custodia igualmente el contenido del visitante');
-    assert(t1.marker() === UID_A && t2.marker() === UID_A, 'y el marcador queda en el dueño que entra');
+    assert(t1.snapshot('__guest__') === null, 'un lock rechazado NO debe archivar el slot (no hay exclusión)');
+    assert(t1.marker() === '__guest__',
+      'el marcador queda intacto mientras la transición está diferida: ' + t1.marker());
     const liveIds12 = t1.live('progress') ? Object.keys(t1.live('progress').resources.completed) : [];
-    assert(liveIds12.indexOf('r-vis') !== -1, 'el contenido del visitante no se pierde con el lock rechazado: ' + JSON.stringify(liveIds12));
+    assert(liveIds12.indexOf('r-vis') !== -1,
+      'el contenido del visitante sigue vivo (no se archiva ni se pierde): ' + JSON.stringify(liveIds12));
   })();
-  record('lock rechazado: la transición se ejecuta sin exclusión y no mezcla contenido entre dueños');
+  record('lock rechazado: fail-closed — sin exclusión no se ejecuta y no se pierde nada');
 
-  /* 13. ERROR SÍNCRONO AL PEDIR EL LOCK: la transición no debe perderse. */
+  /* 13. ERROR SÍNCRONO AL PEDIR EL LOCK: no escapa y tampoco se ejecuta sin
+     exclusión (FAIL-CLOSED, 8.6.3). */
   await (async () => {
     const thrower = makeLocks({ rejectSync: true });
     const bus = makeBus();
@@ -591,11 +609,12 @@ function seedAccount(bus, uid, progressObj) {
     try { t1.auth(user(UID_A)); } catch (e) { threw = e; }
     await flush();
     assert(threw === null, 'un error al PEDIR el lock no debe escapar al manejador de sesión: ' + (threw && threw.message));
-    assert(t1.marker() === UID_A, 'la transición se ejecuta igual (no se pierde)');
-    const snapG = t1.snapshot('__guest__');
-    assert(snapG && snapG.slot.progress.resources.completed['r-vis'] !== undefined, 'y custodia el contenido del visitante');
+    assert(t1.snapshot('__guest__') === null, 'fail-closed: no se archiva sin exclusión');
+    assert(t1.marker() === '__guest__', 'el marcador queda intacto: ' + t1.marker());
+    const live13 = t1.live('progress') ? Object.keys(t1.live('progress').resources.completed) : [];
+    assert(live13.indexOf('r-vis') !== -1, 'y el contenido del visitante sigue vivo: ' + JSON.stringify(live13));
   })();
-  record('error síncrono al adquirir el lock: la transición no se pierde ni rompe el manejador');
+  record('error síncrono al pedir el lock: no escapa al manejador y no se ejecuta sin exclusión');
 
   /* --- auto-verificación del runner --------------------------------- */
   if (process.env.TAB_MERGE_SELFTEST === '1') {

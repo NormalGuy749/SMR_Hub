@@ -127,7 +127,8 @@ function makeTab(bus, opts) {
   const g = {
     console: { log() {}, warn() {}, error() {}, info() {} },
     localStorage: lsView,
-    navigator: {},
+    /* 8.6.3: la transición exige exclusión (fail-closed); el arnés aporta un lock. */
+    navigator: { locks: { request: (name, cb) => Promise.resolve().then(cb) } },
     addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
     dispatchEvent(ev) { (listeners[ev.type] || []).slice().forEach((fn) => fn(ev)); return true; },
     setTimeout, clearTimeout

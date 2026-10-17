@@ -95,7 +95,10 @@ function makeEnv(opts) {
       get length() { return ls.size; },
       key: (i) => [...ls.keys()][i] === undefined ? null : [...ls.keys()][i]
     },
-    navigator: {},              /* sin Web Locks: transición síncrona */
+    /* 8.6.3: la transición de slots exige EXCLUSIÓN (fail-closed). Este arnés
+       es de UNA pestaña: un lock que concede siempre mantiene lo que la suite
+       comprueba (la mecánica de slots), ahora por la vía CON exclusión. */
+    navigator: { locks: { request: (name, cb) => Promise.resolve().then(cb) } },
     addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
     dispatchEvent(ev) { (listeners[ev.type] || []).slice().forEach((fn) => fn(ev)); return true; },
     setTimeout, clearTimeout

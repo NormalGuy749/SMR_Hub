@@ -2389,6 +2389,27 @@ function renderSettings(root) {
         <input type="checkbox" class="switch" id="setting-animations" aria-label="Activar animaciones">
       </div>
     </section>
+    <section class="settings-group" aria-labelledby="settings-feedback">
+      <h3 class="section-label" id="settings-feedback">Comentarios</h3>
+      <p class="option-hint">¿Un fallo, una idea o algo que no encaja? Cuéntanoslo. Se envía con la cuenta que tengas abierta.</p>
+      <div class="field-row">
+        <label class="field"><span class="field-label">Tipo</span>
+          <select class="input" id="feedback-category" aria-label="Tipo de comentario">
+            <option value="problema">Un problema</option>
+            <option value="sugerencia">Una sugerencia</option>
+            <option value="otro">Otro</option>
+          </select></label>
+        <label class="field"><span class="field-label">Tu comentario (máximo 2000 caracteres)</span>
+          <textarea class="input" id="feedback-message" rows="4" maxlength="2000" aria-label="Tu comentario"
+                    placeholder="Qué has visto, dónde y qué esperabas que ocurriera…"></textarea></label>
+      </div>
+      <div class="field-row">
+        <button type="button" class="btn btn-primary" id="feedback-send">Enviar comentario</button>
+        <p class="count-note" id="feedback-hint"></p>
+      </div>
+      <p class="count-note" id="feedback-status" role="status" aria-live="polite"></p>
+    </section>
+
     <section class="settings-group" aria-labelledby="settings-reset">
       <h3 class="section-label" id="settings-reset">Restablecer</h3>
       <div class="option-row">
@@ -2441,6 +2462,52 @@ function renderSettings(root) {
       SMR.progress.clear();
       render();
     }
+  });
+
+  /* Fase 8.8: comentarios (ver wireFeedback). */
+  wireFeedback(root);
+}
+
+/* ---------- Fase 8.8: comentarios (contrato SMR.feedback) ----------
+   Texto del aviso previo. Depende de la sesión, así que se recalcula al
+   cambiar de cuenta en vez de quedarse con el valor del primer pintado. */
+function feedbackHintText() {
+  const fb = window.SMR.feedback;
+  if (!fb) return '';
+  if (fb.available()) return 'Se enviará a tu cuenta.';
+  return fb.serverReady()
+    ? 'Inicia sesión para enviar comentarios y avisos.'
+    : 'Sin conexión con SMR: ahora mismo no se puede enviar.';
+}
+
+/* La interfaz NO habla con Supabase: llama al contrato de js/cloud-feedback.js
+   y muestra el resultado REAL. Sin servidor, sin sesión o sin conexión el
+   mensaje lo dice: nunca se finge un envío. */
+function wireFeedback(root) {
+  const send = $('#feedback-send', root);
+  const category = $('#feedback-category', root);
+  const message = $('#feedback-message', root);
+  const status = $('#feedback-status', root);
+  const hint = $('#feedback-hint', root);
+  const fb = window.SMR.feedback;
+  if (!send || !category || !message || !status || !hint || !fb) return;
+
+  hint.textContent = feedbackHintText();
+
+  send.addEventListener('click', async () => {
+    /* Un doble clic no duplica el envío: el botón deshabilitado ya no dispara
+       clic en un navegador real, pero la guarda no depende de eso. */
+    if (send.disabled) return;
+    send.disabled = true;
+    status.textContent = 'Enviando…';
+    const result = await fb.submitFeedback({ category: category.value, message: message.value });
+    send.disabled = false;
+    if (result.ok) {
+      message.value = '';
+      status.textContent = 'Gracias: tu comentario se ha enviado.';
+      return;
+    }
+    status.textContent = fb.MESSAGES[result.reason] || fb.MESSAGES.error;
   });
 }
 
@@ -2953,7 +3020,13 @@ function renderMapa(root) {
   root.innerHTML = `
     <p class="count-note">Cada ruta ordena los recursos de un módulo como una secuencia: mejor dominar cada peldaño antes de subir al siguiente.</p>
     ${paths.map((p) => {
-      const steps = (p.steps || []).map((id) => D.resources.find((r) => r.id === id)).filter(Boolean);
+      /* Un paso cuyo recurso no existe NO se descarta en silencio: se cuenta
+         como pendiente para no mostrar una ruta más corta de lo que es
+         (los ids y su justificación están en SMR_DATA.contentGaps). */
+      const byId = new Map((D.resources || []).map((r) => [r.id, r]));
+      const all = p.steps || [];
+      const steps = all.map((id) => byId.get(id)).filter(Boolean);
+      const pendientes = all.length - steps.length;
       if (!steps.length) return '';
       const doneCount = steps.filter((r) => SMR.progress.isCompleted(r.id)).length;
       const pct = Math.round((doneCount / steps.length) * 100);
@@ -2967,6 +3040,7 @@ function renderMapa(root) {
             <span class="badge${pct === 100 ? ' badge-done' : ''}">${doneCount}/${steps.length} completados</span>
           </div>
           ${progressBar(pct)}
+          ${pendientes ? `<p class="count-note">${pendientes} paso(s) de esta ruta están a la espera de que se publique su recurso; el orden se completa cuando existan.</p>` : ''}
           <ol class="path-steps">
             ${steps.map((r, i) => {
               const done = SMR.progress.isCompleted(r.id);
@@ -3712,6 +3786,20 @@ function init() {
   (() => { const h = parseHash(); document.title = (ROUTES[h.id] ? ROUTES[h.id].title + ' · ' : '') + 'SMR Hub'; })();
   updateThemeButton();
   render();
+
+  /* Fase 8.8: js/cloud-feedback.js se ejecuta DESPUÉS (defer), así que la
+     primera vista se pinta sin SMR.feedback (sección de comentarios y acción
+     de aviso ausentes hasta navegar). Cuando el módulo llega, se repinta la
+     vista actual UNA vez: render() es idempotente y no toca el progreso. */
+  window.addEventListener('smr:feedbackready', render);
+
+  /* El aviso previo de los comentarios depende de la sesión: al cambiar de
+     cuenta se refresca el de la vista montada (un solo listener, aunque la
+     vista se repinte). */
+  window.addEventListener('smr:authchange', () => {
+    const hint = document.getElementById('feedback-hint');
+    if (hint) hint.textContent = feedbackHintText();
+  });
 
   /* Fase 5.5: contexto académico. Solo se pide si no existe perfil válido. */
   maybeAskProfileSetup();

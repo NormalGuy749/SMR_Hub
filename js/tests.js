@@ -555,6 +555,91 @@ window.SMR_TESTS = (function () {
     });
   }
 
+  /* ---------- Fase 8.8: aviso sobre la pregunta en pantalla ----------
+     Solo se ofrece si la pregunta tiene identidad ESTABLE del banco: un
+     aviso sin identidad no es accionable. La interfaz no habla con
+     Supabase: llama al contrato SMR.feedback (js/cloud-feedback.js). */
+
+  function reportHtml(testId, origIndex) {
+    const fb = window.SMR.feedback;
+    const key = fb && fb.questionKeyOf(testId, origIndex);
+    if (!key) return '';
+    return `
+        <div class="quiz-report" data-report-test="${esc(testId)}" data-report-index="${origIndex}">
+          <button type="button" class="link-like" data-report-open>¿Algo mal en esta pregunta? Avisar</button>
+          <div class="report-form field-row" data-report-form hidden>
+            <label class="field"><span class="field-label">Motivo</span>
+              <select class="input" data-report-reason aria-label="Motivo del aviso">
+                <option value="enunciado">El enunciado no se entiende</option>
+                <option value="respuesta">La respuesta correcta no lo es</option>
+                <option value="contexto">Falta información o explicación</option>
+                <option value="otro">Otro</option>
+              </select></label>
+            <label class="field"><span class="field-label">Detalles (opcional, máximo 1000 caracteres)</span>
+              <textarea class="input" data-report-details rows="3" maxlength="1000"
+                        aria-label="Detalles del aviso" placeholder="Qué falla exactamente…"></textarea></label>
+            <div class="report-actions">
+              <button type="button" class="btn btn-sm" data-report-send>Enviar aviso</button>
+              <button type="button" class="btn btn-sm" data-report-cancel>Cancelar</button>
+              <span class="count-note" data-report-status role="status" aria-live="polite"></span>
+            </div>
+          </div>
+        </div>`;
+  }
+
+  function wireReport(root) {
+    const fb = window.SMR.feedback;
+    if (!fb) return;
+    root.querySelectorAll('[data-report-test]').forEach((box) => {
+      const open = box.querySelector('[data-report-open]');
+      const form = box.querySelector('[data-report-form]');
+      const reason = box.querySelector('[data-report-reason]');
+      const details = box.querySelector('[data-report-details]');
+      const status = box.querySelector('[data-report-status]');
+      const send = box.querySelector('[data-report-send]');
+      const cancel = box.querySelector('[data-report-cancel]');
+      if (!open || !form || !reason || !details || !status || !send || !cancel) return;
+      const testId = box.dataset.reportTest;
+      const origIndex = Number(box.dataset.reportIndex);
+
+      open.addEventListener('click', () => {
+        form.hidden = false;
+        status.textContent = '';
+        reason.focus();
+      });
+
+      cancel.addEventListener('click', () => {
+        form.hidden = true;
+        status.textContent = '';
+      });
+
+      send.addEventListener('click', async () => {
+        if (send.disabled) return; /* un doble clic no envía dos avisos */
+        const key = fb.questionKeyOf(testId, origIndex);
+        if (!key) {
+          status.textContent = fb.MESSAGES.invalid;
+          return;
+        }
+        send.disabled = true;
+        status.textContent = 'Enviando…';
+        const result = await fb.submitQuestionReport({
+          testId: testId,
+          questionKey: key,
+          reason: reason.value,
+          details: details.value
+        });
+        send.disabled = false;
+        if (result.ok) {
+          form.hidden = true;
+          details.value = '';
+          status.textContent = 'Gracias: hemos registrado el aviso.';
+          return;
+        }
+        status.textContent = fb.MESSAGES[result.reason] || fb.MESSAGES.error;
+      });
+    });
+  }
+
   /* ---------- Pregunta ---------- */
 
   function renderQuestion(root) {
@@ -595,6 +680,7 @@ window.SMR_TESTS = (function () {
           <button type="button" class="btn btn-primary" id="quiz-next" hidden>${s.index + 1 === total ? 'Ver resultado' : 'Siguiente pregunta'}</button>
         </div>
         ${s.mode === 'srs' ? `<div data-srs-test="${esc(c.testId)}" data-srs-index="${c.origIndex}">${srsDropHtml(c.testId, c.origIndex)}</div>` : ''}
+        ${reportHtml(c.testId, c.origIndex)}
       </div>`;
 
     if (showTimer) updateTimerEl();
@@ -657,6 +743,9 @@ window.SMR_TESTS = (function () {
        contrato y misma confirmación que 8.5.9; el avance lo decide
        advanceAfterSrsDrop). */
     if (s.mode === 'srs') wireSrsDrop(root, (testId, origIndex, message) => advanceAfterSrsDrop(root, testId, origIndex, message));
+
+    /* Fase 8.8: aviso sobre la pregunta en pantalla. */
+    wireReport(root);
 
     nextBtn.addEventListener('click', () => {
       if (s.adaptive) {

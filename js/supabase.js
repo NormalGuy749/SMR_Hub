@@ -26,8 +26,36 @@
   SMR.cloudAvailable = false;
   SMR.cloud = null;
 
-  /* Guard: no inicializar nada sin ambas variables públicas. */
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  /* Guard 1: no inicializar nada sin ambas variables públicas y bien formadas.
+     "Sin configuración" es un estado legítimo (local-first) y calla; una
+     configuración presente pero a medias no puede declarar la app conectada y
+     se registra en consola. */
+  const URL_OK = typeof SUPABASE_URL === 'string' && /^https?:\/\/\S+$/i.test(SUPABASE_URL);
+  const KEY_OK = typeof SUPABASE_ANON_KEY === 'string' && SUPABASE_ANON_KEY.trim().length >= 8;
+  if (!URL_OK || !KEY_OK) {
+    if (SUPABASE_URL || SUPABASE_ANON_KEY) {
+      if (global.console && global.console.warn) {
+        global.console.warn('[SMR cloud] configuración pública incompleta o inválida: no se inicializa el cliente');
+      }
+    }
+    return;
+  }
+
+  /* Guard 2 (auditoría de estabilización): una página servida en un origen
+     público NO se conecta a un endpoint loopback aunque la inyección de
+     configuración traiga por error los valores del stack local — eso enviaría
+     a cada visitante a su propio 127.0.0.1. Se comprueba en el cliente porque
+     el valor puede llegar de fuera de este repositorio; sin inicializar, la
+     app queda local-first como siempre. */
+  const PAGE_HOST = (global.location && global.location.hostname) || '';
+  const PAGE_IS_LOCAL = PAGE_HOST === '' || PAGE_HOST === 'localhost' || PAGE_HOST === '127.0.0.1' ||
+    PAGE_HOST === '[::1]' || PAGE_HOST === '::1';
+  if (!PAGE_IS_LOCAL && /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::|\/|$)/i.test(SUPABASE_URL)) {
+    if (global.console && global.console.warn) {
+      global.console.warn('[SMR cloud] configuración loopback en un origen público: no se inicializa el cliente');
+    }
+    return;
+  }
 
   const CLIENT_OPTIONS = {
     auth: {

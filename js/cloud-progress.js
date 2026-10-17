@@ -385,7 +385,16 @@
     initialSyncFor: null, /* uid con sync inicial ya programado (8.4.1, A2) */
     retryTimer: null,
     retryDelay: 3000,
-    maxRetryDelay: 120000
+    maxRetryDelay: 120000,
+    maxRetries: 10, /* reintentos transitorios seguidos; la cola persiste y el próximo envío la retoma */
+    retryCount: 0,
+    authPaused: false, /* JWT/401: la cola se conserva y se reanuda al reautenticar */
+    /* 8.6.3: transición de slots DIFERIDA por falta de exclusión. Mientras esté
+       activo, NO se escribe nada: el estado en memoria es del dueño anterior. */
+    transitionPending: false,
+    deferredUser: null,
+    deferredBody: null,
+    transitionTimer: null
   };
 
   /* ---------- cola persistida (por propietario, 8.4.1) ---------- */
@@ -478,6 +487,13 @@
     if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return true;
     const msg = (err && err.message) || '';
     return /violates|not-null|check constraint|unsupported table|invalid input|identidad/i.test(msg);
+  }
+
+  /* PGRST301/302 y mensajes de JWT: sesión inválida, no un fallo de datos. */
+  function isAuthError(err) {
+    const code = err && err.code;
+    if (code === 'PGRST301' || code === 'PGRST302') return true;
+    return /jwt|not authenticated|unauthori[sz]ed|401/i.test((err && err.message) || '');
   }
 
   /* ---------- detección de cambios locales (wrapping) ---------- */
@@ -662,7 +678,7 @@
 
   let drainTimer = null;
   function scheduleDrain(delay) {
-    if (!runtime.currentUser) return;
+    if (!runtime.currentUser || runtime.transitionPending) return;
     if (drainTimer) clearTimeout(drainTimer);
     drainTimer = setTimeout(() => { drainQueue(); }, typeof delay === 'number' ? delay : 800);
   }
@@ -727,6 +743,7 @@
           removeQueued(job.kind, job.events, owner);
         } catch (err) {
           warn('push ' + job.kind, err);
+          if (isAuthError(err)) { runtime.authPaused = true; return; } /* no dead-letter: se reintenta tras reautenticar */
           /* 8.4.1 (M5): un dominio fallido NO bloquea a los demás — se
              continúa con el resto de jobs en lugar de abandonar el ciclo. */
           if (isPermanentError(err)) {
@@ -766,7 +783,7 @@
   }
 
   function pushState() {
-    if (!runtime.currentUser) return;
+    if (!runtime.currentUser || runtime.transitionPending) return;
     return chainOrNow(async () => {
       const uid = runtime.currentUser.id;
       const owner = currentOwner();
@@ -1559,7 +1576,11 @@
        de cuenta a mitad de sync hacía que el sync inicial de la cuenta
        nueva se descartara para siempre (syncing seguía true). Ahora cada
        usuario tiene su propio job encolado en la cadena serializada. */
-    if (runtime.initialSyncFor === user.id) return syncChain; /* ya programado */
+    /* 8.6.3: re-login de la MISMA cuenta —el caso típico tras un 401— no tiene
+       trabajo inicial nuevo, pero la cola pudo quedar PAUSADA por el error de
+       autenticación: hay que reanudarla, o los eventos no confirmados se
+       quedarían sin enviar hasta que otra actividad programe un drenaje. */
+    if (runtime.initialSyncFor === user.id) { scheduleDrain(0); return syncChain; }
     runtime.initialSyncFor = user.id;
     runtime.syncing = true;
     return enqueue(async () => {
@@ -1593,6 +1614,8 @@
   }
 
   function drainQueue() {
+    if (runtime.authPaused) return;
+    if (runtime.transitionPending) return; /* 8.6.3: sin exclusión no hay sesión conmutada: no se escribe */
     if (!runtime.currentUser || runtime.syncing) return;
     const owner = currentOwner();
     const q = readQueue(owner);
@@ -1606,21 +1629,158 @@
       const q2 = readQueue(owner);
       const still = (q2.attempts || []).length + (q2.sessions || []).length +
         (q2.activity || []).length + (q2.wrongEvents || []).length + (q2.streakDays || []).length;
-      if (still > 0) {
+      if (still > 0 && !runtime.authPaused) {
         scheduleRetry();
       } else {
         runtime.retryDelay = 3000;
+        runtime.retryCount = 0;
       }
     });
   }
 
   function scheduleRetry() {
-    if (runtime.retryTimer) return;
+    if (runtime.retryTimer || runtime.authPaused) return;
+    if (++runtime.retryCount > runtime.maxRetries) { warn('retry', new Error('límite de reintentos: la cola se conserva para el próximo envío')); return; }
     runtime.retryTimer = setTimeout(() => {
       runtime.retryTimer = null;
       runtime.retryDelay = Math.min(runtime.retryDelay * 2, runtime.maxRetryDelay);
       drainQueue();
     }, runtime.retryDelay);
+  }
+
+  /* ---------- contrato de propiedad de sesión (fase 8.6.3) ----------
+     cloud-profile.js comparte el slot 'studentProfile' (está en SLOT_KEYS)
+     pero se carga ANTES que este módulo, así que su listener de
+     'smr:authchange' corre ANTES que la transición de slots de aquí: leía la
+     clave viva cuando todavía era del dueño anterior y subía el perfil de A a
+     la fila cloud de B (reproducido en tests/profile-owner.test.js). La
+     transición se ANUNCIA por este contrato —no por el orden de listeners— y
+     el consumidor espera a que el slot de SU uid esté instalado. */
+  const session = {
+    owner: runtime.liveOwner, /* dueño del slot vivo según el último anuncio */
+    generation: 0,            /* se incrementa en cada transición completada */
+    pendingOwners: [],        /* dueños con transición EN VUELO (puede haber varias encoladas) */
+    waiters: []               /* esperas registradas por awaitSlot() */
+  };
+
+  /* Dueño del slot vivo AHORA. El marcador PERSISTIDO (compartido entre
+     pestañas) es la verdad; la memoria de ESTA pestaña solo sirve de respaldo
+     cuando no hay marcador (perfil heredado). Web Locks serializa las
+     transiciones, pero NO comparte el estado del contrato: sin leer el
+     marcador, una pestaña con la sesión antigua seguiría considerando válido su
+     token —y su cola— después de que OTRA pestaña cambiara de cuenta, y
+     escribiría el perfil del dueño nuevo en la fila del dueño viejo. */
+  function slotOwnerNow() {
+    return readLiveOwner() || session.owner;
+  }
+
+  function notifySlot(owner) {
+    /* El marcador persistido es la verdad del slot vivo: si su escritura
+       falló (cuota), el anuncio no coincide y el consumidor falla cerrado en
+       vez de escribir atribuyendo el contenido al dueño equivocado. */
+    session.owner = readLiveOwner() || owner;
+    session.generation++;
+    const still = [];
+    session.waiters.forEach((w) => {
+      if (w.owner === session.owner) w.resolve(true);
+      else if (session.pendingOwners.indexOf(w.owner) !== -1) still.push(w); /* su transición sigue en vuelo */
+      else w.resolve(false);                                                 /* ya no llegará: no bloquear */
+    });
+    session.waiters = still;
+  }
+
+  /* Resuelve true cuando el slot vivo es de `owner`. Solo ESPERA una
+     transición ya en vuelo hacia ese dueño; en cualquier otro caso responde
+     de inmediato, así que nunca bloquea la cadena del consumidor. */
+  function awaitSlot(owner) {
+    if (session.pendingOwners.indexOf(owner) !== -1) {
+      return new Promise((resolve) => { session.waiters.push({ owner: owner, resolve: resolve }); });
+    }
+    return Promise.resolve(slotOwnerNow() === owner);
+  }
+
+  SMR.cloudSession = {
+    awaitSlot: awaitSlot,
+    owner: function () { return slotOwnerNow(); },
+    token: function () { return { owner: slotOwnerNow(), generation: session.generation }; },
+    isCurrent: function (t) { return !!t && slotOwnerNow() === t.owner && session.generation === t.generation; },
+    /* 8.6.3: estado observable — la transición está diferida por falta de
+       exclusión. Una UI puede avisar de que el cambio de cuenta no se ha
+       aplicado y ofrecer reintentar o recargar. */
+    transitionPending: function () { return !!runtime.transitionPending; }
+  };
+
+  /* ---------- intento de transición con recuperación (fase 8.6.3) ----------
+     Sin exclusión la transición NO se ejecuta. Pero DESCARTARLA dejaría el slot
+     sin archivar/restaurar (la razón por la que 8.5.12 la ejecutaba sin
+     protección), así que se DIFIERE: no se toca el slot ni el marcador, la
+     sesión en memoria no se conmuta, la sincronización queda bloqueada y se
+     reintenta con backoff ACOTADO. Una decisión de sesión nueva cancela el
+     reintento pendiente, de modo que un trabajo antiguo no se reactiva. */
+  const MAX_TRANSITION_ATTEMPTS = 5;
+
+  function removePendingOwner(owner) {
+    const i = session.pendingOwners.indexOf(owner);
+    if (i !== -1) session.pendingOwners.splice(i, 1);
+  }
+
+  /* Esperas de un dueño cuya transición NO se ejecutó: se resuelven en FALSE
+     para que ningún consumidor quede bloqueado. Nada ha cambiado, así que no se
+     toca `session.owner` ni la generación. */
+  function failPendingOwner(owner) {
+    removePendingOwner(owner);
+    const still = [];
+    session.waiters.forEach((w) => {
+      if (w.owner === owner) w.resolve(false);
+      else if (session.pendingOwners.indexOf(w.owner) !== -1) still.push(w);
+      else if (w.owner === slotOwnerNow()) w.resolve(true);
+      else w.resolve(false);
+    });
+    session.waiters = still;
+  }
+
+  function attemptSlotTransition(user, attempt, body) {
+    const announcedOwner = user ? (user.id || 'user') : GUEST_OWNER;
+    /* una decisión nueva cancela el reintento anterior */
+    if (runtime.transitionTimer) { clearTimeout(runtime.transitionTimer); runtime.transitionTimer = null; }
+    runtime.deferredUser = user;
+    runtime.deferredBody = body;
+    session.pendingOwners.push(announcedOwner);
+    return withSlotTransitionLock(() => {
+      try { body(announcedOwner); }
+      finally { removePendingOwner(announcedOwner); notifySlot(announcedOwner); }
+    }).then((ran) => {
+      if (ran) {
+        runtime.transitionPending = false;   /* la sesión y el slot ya están alineados */
+        runtime.deferredUser = null;
+        runtime.deferredBody = null;
+        return true;
+      }
+      /* fail-closed: el slot, el marcador y la sesión siguen como estaban */
+      failPendingOwner(announcedOwner);
+      deferSlotTransition(user, attempt, body);
+      return false;
+    });
+  }
+
+  function deferSlotTransition(user, attempt, body) {
+    /* Bloquea la sincronización: el estado en memoria es del dueño anterior y
+       no debe escribirse con la sesión nueva (RLS lo rechazaría y desviaría la
+       cola a dead-letter). */
+    runtime.transitionPending = true;
+    runtime.deferredUser = user;
+    runtime.deferredBody = body;
+    if (attempt >= MAX_TRANSITION_ATTEMPTS) {
+      warn('transición de slots diferida: sin exclusión tras ' + attempt + ' intentos; hace falta una nueva decisión de sesión o recargar',
+        new Error('Web Locks no disponible'));
+      return; /* no se reintenta indefinidamente: la recuperación es explícita */
+    }
+    const delay = Math.min(500 * Math.pow(2, attempt), 8000);
+    runtime.transitionTimer = setTimeout(() => {
+      runtime.transitionTimer = null;
+      if (runtime.deferredUser !== user) return; /* superada por otra decisión */
+      attemptSlotTransition(user, attempt + 1, body);
+    }, delay);
   }
 
   /* ---------- transiciones de sesión ---------- */
@@ -1695,35 +1855,27 @@
   function withSlotTransitionLock(fn) {
     let locks = null;
     try { locks = global.navigator && global.navigator.locks; } catch (e) { locks = null; }
-    let ran = false;
-    /* 8.5.12: si el lock no existe o su petición RECHAZA (documento no
-       activo, p. ej. una página en bfcache), la transición se ejecuta igual
-       sin exclusión (comportamiento previo a 8.4.5) en vez de perderse: una
-       transición perdida deja el slot sin archivar/restaurar. */
-    const runDirect = () => {
-      if (ran) return;
-      ran = true;
-      try { return fn(); } catch (err) { warn('transición de slots (sin lock)', err); return Promise.resolve(); }
-    };
-    if (!locks || typeof locks.request !== 'function') return runDirect();
-    /* 8.5.13: si la PETICIÓN del lock lanza síncronamente (polyfill roto u
-       opciones inválidas), la excepción escapaba al manejador de sesión y la
-       transición se perdía. Se ejecuta igual sin exclusión, como en 8.5.12.
-       `runDirect` es idempotente (ran): una transición ya ejecutada no se
-       repite aunque el lock no devuelva un thenable usable. */
+    /* 8.6.3: FAIL-CLOSED. La transición es crítica (archiva, restaura y
+       modifica el slot compartido y el marcador). Sin exclusión garantizada NO
+       se ejecuta: devuelve false y el llamante decide (diferir y reintentar, o
+       descartar si su operación es idempotente). Ejecutarla sin exclusión es
+       justo lo que el 8.4.5 reprodujo corrompiendo los slots per-owner. */
+    if (!locks || typeof locks.request !== 'function') {
+      warn('transición de slots sin exclusión: NO se ejecuta (Web Locks no disponible)', new Error('no-locks'));
+      return Promise.resolve(false);
+    }
     let req;
     try {
       req = locks.request('smrhub:slot-transition', async () => {
-        ran = true;
         try { return await fn(); } catch (err) { warn('transición de slots', err); }
       });
     } catch (err) {
-      warn('lock de transición no se pudo pedir; se ejecuta igual sin exclusión', err);
-      return runDirect();
+      warn('lock de transición no se pudo pedir: la transición NO se ejecuta', err);
+      return Promise.resolve(false);
     }
-    return Promise.resolve(req).catch((err) => {
-      warn('lock de transición rechazado; se ejecuta igual sin exclusión', err);
-      return runDirect();
+    return Promise.resolve(req).then(function () { return true; }, function (err) {
+      warn('lock de transición rechazado: la transición NO se ejecuta', err);
+      return false;
     });
   }
 
@@ -1795,8 +1947,12 @@
     wired = true;
     wireStorageReconciler();
     global.addEventListener('smr:authchange', (event) => {
-  withSlotTransitionLock(() => {  /* 8.4.5 (H-2): transición de slots serializada entre pestañas */
-      const user = event.detail && event.detail.user;
+      const authUser = event.detail && event.detail.user;
+      if (authUser) { runtime.authPaused = false; runtime.retryCount = 0; }
+      /* 8.6.3: la transición se intenta BAJO EXCLUSIÓN. Si no se puede
+         garantizar, se difiere y se reintenta (fail-closed). */
+      attemptSlotTransition(authUser, 0, (announcedOwner) => {
+      const user = authUser;
       /* 8.5.11 (D-3) + 8.5.12: el dueño del slot vivo es el MARCADOR
          PERSISTIDO (lo escribe la pestaña que ejecuta cada transición), no la
          memoria de ESTA pestaña. `runtime.currentUser` puede estar desfasado
@@ -1810,7 +1966,7 @@
       const prevOwner = persistedOwner
         ? slotOwnerOrUnknown(persistedOwner)
         : (runtime.currentUser ? (runtime.currentUser.id || 'user') : null);
-      const nextOwner = user ? (user.id || 'user') : GUEST_OWNER;
+      const nextOwner = announcedOwner; /* 8.6.3: una sola fuente para el dueño */
 
       /* 8.4.2 (M-1): el slot vivo SIEMPRE se archiva bajo el dueño
          actual ANTES de cualquier transición (logout o cambio de
@@ -1921,7 +2077,7 @@
       runtime.liveOwner = nextOwner;
       writeLiveOwner(nextOwner);
       writeLiveWriter(nextOwner); /* 8.5.13: el slot queda con el contenido de nextOwner */
-    });
+    }); /* fin del cuerpo: el anuncio y la resolución de esperas los hace attemptSlotTransition */
     });
   }
 

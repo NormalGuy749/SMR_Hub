@@ -1,0 +1,391 @@
+{
+  "note": "Línea base revisada el 2026-10-16. Regenerar solo tras revisar el cambio y actualizar la justificación del informe.",
+  "gaps": [
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-hw-componentes"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-hw-discos"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-hw-ram"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-man-diagnostico"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-man-drivers"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-man-montaje"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-man-preventivo"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-ofi-hoja"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-ofi-presentaciones"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-ofi-texto"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-red-arp-dhcp"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-red-ipv4"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-red-osi"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-red-subnetting"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-red-tcpip"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-seg-backup"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-seg-contrasenas"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-seg-malware"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-so-linux-cli"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-so-particiones"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-so-procesos"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-so-windows"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-virt-conceptos"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-virt-redes"
+    },
+    {
+      "kind": "lesson-orphan",
+      "ref": "r-virt-virtualbox"
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-hw-componentes",
+      "count": 2
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-hw-discos",
+      "count": 6
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-hw-ram",
+      "count": 4
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-man-diagnostico",
+      "count": 4
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-man-drivers",
+      "count": 1
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-man-montaje",
+      "count": 1
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-man-preventivo",
+      "count": 7
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-ofi-hoja",
+      "count": 7
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-ofi-presentaciones",
+      "count": 3
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-ofi-texto",
+      "count": 5
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-seg-backup",
+      "count": 1
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-seg-contrasenas",
+      "count": 4
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-seg-malware",
+      "count": 4
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-so-particiones",
+      "count": 2
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-so-procesos",
+      "count": 1
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-so-windows",
+      "count": 1
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-virt-conceptos",
+      "count": 6
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-virt-redes",
+      "count": 5
+    },
+    {
+      "kind": "question-relatedResource",
+      "ref": "r-virt-virtualbox",
+      "count": 7
+    },
+    {
+      "kind": "route-step",
+      "path": "ruta-servicios",
+      "ref": "r-red-arp-dhcp"
+    },
+    {
+      "kind": "route-step",
+      "path": "ruta-direccionamiento",
+      "ref": "r-red-ipv4"
+    },
+    {
+      "kind": "route-step",
+      "path": "ruta-direccionamiento",
+      "ref": "r-red-subnetting"
+    },
+    {
+      "kind": "route-step",
+      "path": "ruta-seguridad",
+      "ref": "r-seg-backup"
+    },
+    {
+      "kind": "route-step",
+      "path": "ruta-seguridad",
+      "ref": "r-seg-contrasenas"
+    },
+    {
+      "kind": "route-step",
+      "path": "ruta-seguridad",
+      "ref": "r-seg-malware"
+    },
+    {
+      "kind": "route-step",
+      "path": "ruta-sistemas",
+      "ref": "r-so-particiones"
+    }
+  ],
+  "questionIds": [
+    "t-hardware::q-049e7c6d36e9a466",
+    "t-hardware::q-0a059a7a949c47f1",
+    "t-hardware::q-18d9ec6bc261c972",
+    "t-hardware::q-2c651b0c744a18f5",
+    "t-hardware::q-4163570bebb4c24e",
+    "t-hardware::q-46638a44cc8dffab",
+    "t-hardware::q-5c52c77f091a6c76",
+    "t-hardware::q-764efd603b0a1075",
+    "t-hardware::q-7a97977606b43781",
+    "t-hardware::q-9a275c33110baa16",
+    "t-hardware::q-af08fba9129f1696",
+    "t-hardware::q-b0dc7261160eb8d2",
+    "t-hardware::q-ba98956199b6b006",
+    "t-hardware::q-c29390e8e18d5d79",
+    "t-hardware::q-c31ae77804773e5f",
+    "t-hardware::q-c85bfa3d1579dcaa",
+    "t-hardware::q-cf431e04ea95104d",
+    "t-hardware::q-dcc304686eff134d",
+    "t-hardware::q-e97256d004c9277d",
+    "t-hardware::q-f12379f5f506fcb4",
+    "t-hardware::q-f38d910a43873c31",
+    "t-hardware::q-f7821af2925ab23f",
+    "t-hardware::q-fa3c44014283b610",
+    "t-hardware::q-ffcd87ed613ed8f0",
+    "t-mantenimiento::q-1f05d75b9329a788",
+    "t-mantenimiento::q-3c49be852944ac02",
+    "t-mantenimiento::q-5356c942889207c3",
+    "t-mantenimiento::q-5e8122e61bd6c9d5",
+    "t-mantenimiento::q-67faf306ad6b1995",
+    "t-mantenimiento::q-8e4c47d718675caa",
+    "t-mantenimiento::q-98eeda6f6ab21534",
+    "t-mantenimiento::q-a370098cc8dce767",
+    "t-mantenimiento::q-ac092a3c7c987563",
+    "t-mantenimiento::q-b577c793c85c2ea2",
+    "t-mantenimiento::q-b9308010a551115f",
+    "t-mantenimiento::q-be9112a1d2634f72",
+    "t-mantenimiento::q-c450b57281a4305d",
+    "t-mantenimiento::q-c7fba5552943d136",
+    "t-mantenimiento::q-cea115d4be5e59c5",
+    "t-mantenimiento::q-e66fba35d5c211d6",
+    "t-mantenimiento::q-f21e30ef95ec9442",
+    "t-mantenimiento::q-f79ff3b573dfc148",
+    "t-ofimatica::q-0c7d8fce35cbd2f5",
+    "t-ofimatica::q-0dba33a0ec16a685",
+    "t-ofimatica::q-4966f86a160a04cf",
+    "t-ofimatica::q-5bbe8297f250bf08",
+    "t-ofimatica::q-61c6d5af122c7d28",
+    "t-ofimatica::q-630cce71e63bd07c",
+    "t-ofimatica::q-693e4dde8181f9e3",
+    "t-ofimatica::q-7589ef0762a731d6",
+    "t-ofimatica::q-85fdf06082de1ca7",
+    "t-ofimatica::q-972ddb2dc464d8ec",
+    "t-ofimatica::q-ac6181bad6b59e6f",
+    "t-ofimatica::q-b0fa24792dbac272",
+    "t-ofimatica::q-d248aba8cb1122e9",
+    "t-ofimatica::q-d384408fe2093d8c",
+    "t-ofimatica::q-e9b44ec4d2f426b9",
+    "t-ofimatica::q-fa708dbda6da274c",
+    "t-redes::q-16d9b90e53916d0f",
+    "t-redes::q-1ee606208aed90d7",
+    "t-redes::q-21c6d4a4a431f0f7",
+    "t-redes::q-2f2a151019618443",
+    "t-redes::q-3363d2dfd2863ece",
+    "t-redes::q-441d9b4c538440e3",
+    "t-redes::q-46311e2e3fe8cced",
+    "t-redes::q-4d80ed9f35e9b790",
+    "t-redes::q-5cf01986f296bb13",
+    "t-redes::q-62d4604cb973b3f5",
+    "t-redes::q-867b46131296c4b8",
+    "t-redes::q-91c8a40b34fdeb5c",
+    "t-redes::q-955d2b3764445c3c",
+    "t-redes::q-9806f8d0ae2a67b5",
+    "t-redes::q-a0a1285ad6f35783",
+    "t-redes::q-a2275f4a0f26eb83",
+    "t-redes::q-aeb0e2d423e2cbeb",
+    "t-redes::q-b0968c19e6c09686",
+    "t-redes::q-bb64b3552a51998e",
+    "t-redes::q-c35c67ba6021e173",
+    "t-redes::q-d3cb7fbe4c743c3f",
+    "t-redes::q-e1d5f34c7875e069",
+    "t-redes::q-f550565bdf249e0c",
+    "t-redes::q-f73c63307606201d",
+    "t-redes::q-f7d1d1e3581c91e0",
+    "t-redes::q-fbf6ea19cdf69712",
+    "t-redes::q-fc77db45b4eefbca",
+    "t-seguridad::q-03c2a275f29946b8",
+    "t-seguridad::q-044ddb59bff614be",
+    "t-seguridad::q-063f1f355cf641c6",
+    "t-seguridad::q-071e17f614d28b1b",
+    "t-seguridad::q-17e8c1e516ec71d6",
+    "t-seguridad::q-301376e2a5c347b9",
+    "t-seguridad::q-46a546aba9ba9946",
+    "t-seguridad::q-4a4b31400e5c5fe5",
+    "t-seguridad::q-62ac2f3d0b4fa94a",
+    "t-seguridad::q-6525243064708cd9",
+    "t-seguridad::q-78437aef5ba68774",
+    "t-seguridad::q-88152fdbe41ba268",
+    "t-seguridad::q-88992a860a5508e9",
+    "t-seguridad::q-ae534c81b8a8bd86",
+    "t-seguridad::q-b283bbc0f9885e0b",
+    "t-seguridad::q-c2ef152450997f1d",
+    "t-seguridad::q-c4cbc13a104d60b1",
+    "t-seguridad::q-c5d77e2add16045b",
+    "t-seguridad::q-c6819bb20db36b5f",
+    "t-seguridad::q-ca89a4a43f4968bd",
+    "t-seguridad::q-e03d1b0531775826",
+    "t-seguridad::q-e15267928bd6bc29",
+    "t-seguridad::q-f041dc8dd25fd3f8",
+    "t-seguridad::q-fae111c1c4d1b5f6",
+    "t-seguridad::q-fc50bbace93e0c8b",
+    "t-sistemas::q-05f74e9b9ac22326",
+    "t-sistemas::q-13fd83298c18f772",
+    "t-sistemas::q-16de9c0d5bb6cd58",
+    "t-sistemas::q-2b6d5b92482dfd51",
+    "t-sistemas::q-2c21490cbcca6ba1",
+    "t-sistemas::q-3abfd396ed78072f",
+    "t-sistemas::q-424f754a14e4220d",
+    "t-sistemas::q-69bc7b67afa049c0",
+    "t-sistemas::q-6a7089377378ffa4",
+    "t-sistemas::q-7629e50fff74db74",
+    "t-sistemas::q-7b1c969241c98b09",
+    "t-sistemas::q-7d3762f41afd9b43",
+    "t-sistemas::q-88784afa240b0045",
+    "t-sistemas::q-9108cddb858bd33c",
+    "t-sistemas::q-939e9b9d2ec58544",
+    "t-sistemas::q-9af32fc50a3b197a",
+    "t-sistemas::q-b77c79651c292258",
+    "t-sistemas::q-d27c75878e73367e",
+    "t-sistemas::q-d39f86964af491d7",
+    "t-sistemas::q-d657365f1891dc88",
+    "t-sistemas::q-e35a791962781b1c",
+    "t-sistemas::q-e4772b4e7583c837",
+    "t-sistemas::q-ef667251368f9976",
+    "t-sistemas::q-f09cc93a492688d7",
+    "t-sistemas::q-f6ea12f4730b388b",
+    "t-sistemas::q-fcd9e7a53a9eba48",
+    "t-virtualizacion::q-0423cd2076ff7e77",
+    "t-virtualizacion::q-09ad3f1105abda12",
+    "t-virtualizacion::q-09dc5c770ea70bc8",
+    "t-virtualizacion::q-478452a43f9a17ff",
+    "t-virtualizacion::q-6133abf4d57d4771",
+    "t-virtualizacion::q-6181e901531abe6c",
+    "t-virtualizacion::q-7126c5987ce00acf",
+    "t-virtualizacion::q-753880c25d8c4241",
+    "t-virtualizacion::q-870c8f035f80b9a8",
+    "t-virtualizacion::q-87f89c529fae8c49",
+    "t-virtualizacion::q-9089d77511742954",
+    "t-virtualizacion::q-9d796b96fada31a1",
+    "t-virtualizacion::q-afd0f7f1b6f61894",
+    "t-virtualizacion::q-b4430d8fad71579c",
+    "t-virtualizacion::q-bb52abde791f0c09",
+    "t-virtualizacion::q-d4841fad6ba7d772",
+    "t-virtualizacion::q-ddfa0133cf262830",
+    "t-virtualizacion::q-f32f9c63ccf7b2ee"
+  ]
+}

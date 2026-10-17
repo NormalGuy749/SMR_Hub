@@ -279,3 +279,17 @@ table tbody tr:hover { background: var(--hover); }
 }
 
 .path-steps { margin: var(--sp-4) 0 0; padding: 0; }
+
+/* ----- Fase 8.8: formularios de envío (comentario y aviso) -----
+   Reutiliza .field-row/.field/.input/.count-note; solo añade que los campos
+   ocupen la línea completa y que el textarea crezca en vertical (un textarea
+   sin ancho no es usable). */
+.settings-group .field-row > .field,
+.report-form .field { flex: 1 1 100%; }
+
+.settings-group .field-row textarea.input,
+.report-form textarea.input { min-height: 84px; resize: vertical; }
+
+.quiz-report { margin-top: var(--sp-4); }
+.report-form { margin-top: var(--sp-2); }
+.report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); flex: 1 1 100%; }

@@ -1370,14 +1370,38 @@
     D.cases = (D.cases || []).concat(CASES || []);
     D.learningPaths = (D.learningPaths || []).concat(LEARNING_PATHS || []);
 
-    /* Comprobaciones de integridad referencial (aviso en consola si algo falla) */
+    /* Comprobaciones de integridad referencial (aviso en consola si algo falla).
+       Además del aviso, cada referencia que no resuelve se registra de forma
+       estructurada en SMR_DATA.contentGaps: el aviso de consola se pierde al
+       recargar, la lista no, y es lo que permite resolver la incidencia después
+       (tests/content-integrity.test.js la compara con una línea base revisada).
+       NO se sustituye ninguna referencia por otra: sin equivalencia demostrada
+       por contenido y contexto, un id ajeno sería una relación falsa. El id
+       original se conserva intacto. */
     const resIds = new Set((D.resources || []).map((r) => r.id));
+    const gaps = [];
     (D.learningPaths || []).forEach((p) => {
-      (p.steps || []).forEach((id) => { if (!resIds.has(id)) problems.push('ruta ' + p.id + ' → recurso inexistente: ' + id); });
+      (p.steps || []).forEach((id) => {
+        if (resIds.has(id)) return;
+        problems.push('ruta ' + p.id + ' → recurso inexistente: ' + id);
+        gaps.push({ kind: 'route-step', path: p.id, ref: id });
+      });
     });
     (D.resources || []).forEach((r) => {
-      if (r.relatedResources) r.relatedResources.forEach((id) => { if (!resIds.has(id)) problems.push('recurso ' + r.id + ' relacionado inexistente: ' + id); });
+      if (r.relatedResources) r.relatedResources.forEach((id) => {
+        if (resIds.has(id)) return;
+        problems.push('recurso ' + r.id + ' relacionado inexistente: ' + id);
+        gaps.push({ kind: 'resource-related', from: r.id, ref: id });
+      });
     });
+    /* Lecciones enriquecidas cuyo recurso no existe: es contenido escrito que hoy
+       no llega a ninguna pantalla. Se registra (y se conserva) como evidencia
+       para publicar el recurso; no se borra ni se reasigna a otro id. */
+    Object.keys(LESSON_UPGRADES || {}).forEach((id) => {
+      if (resIds.has(id)) return;
+      gaps.push({ kind: 'lesson-orphan', ref: id });
+    });
+    D.contentGaps = (D.contentGaps || []).concat(gaps);
 
     if (problems.length && window.console) {
       window.console.warn('[SMR content] ' + problems.length + ' aviso(s) de integridad:', problems);

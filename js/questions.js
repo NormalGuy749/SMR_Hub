@@ -282,14 +282,21 @@
           anularlo no altera el progreso ni el historial de repaso. */
     const resIdsAudit = new Set((D.resources || []).map((r) => r.id));
     let anuladas = 0;
+    /* Se cuenta por referencia: la incidencia queda registrada en contentGaps
+       (con cuántas preguntas la usaban) para poder publicar el recurso después. */
+    const anuladasPorRef = new Map();
     D.tests.forEach((t) => {
       t.questions.forEach((q) => {
         if (!q.relatedResource) return;
         if (resIdsAudit.has(q.relatedResource)) return;
+        anuladasPorRef.set(q.relatedResource, (anuladasPorRef.get(q.relatedResource) || 0) + 1);
         q.relatedResource = null;
         anuladas++;
       });
     });
+    D.contentGaps = (D.contentGaps || []).concat(
+      [...anuladasPorRef].map(([ref, count]) => ({ kind: 'question-relatedResource', ref, count }))
+    );
     if (anuladas && window.console) {
       console.info('[SMR questions] ' + anuladas + ' relatedResource anulado(s): el recurso de destino no existe.');
     }

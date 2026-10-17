@@ -95,14 +95,21 @@
   <script src="js/app.js" defer></script>
 
   <!-- Fase 8.2: Auth de Supabase. Orden de ejecución garantizado por defer:
-      SDK CDN → cloud-config (globals públicos) → supabase.js (cliente)
-      → auth.js (UI/estado). Si el CDN falla o no hay red, la app sigue
-      siendo 100% local: el visitante estudia sin Supabase. -->
+      SDK CDN → cloud-config.public (SIN .js: es la ruta que genera Pages para
+      la Function functions/js/cloud-config.public.js, quitándole la última
+      extensión; en local esa ruta no existe y su fallo es inocuo, porque la
+      configuración local llega por cloud-config.js)
+      → cloud-config (overrides SOLO del stack local) → supabase.js (cliente)
+      → auth.js (UI/estado). Si el CDN falla, no hay red o no hay configuración
+      pública, la app sigue siendo 100% local: el visitante estudia sin Supabase.
+      Ver DESPLIEGUE.md para el contrato de configuración. -->
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script defer src="js/cloud-config.public"></script>
   <script defer src="js/cloud-config.js"></script>
   <script defer src="js/supabase.js"></script>
   <script defer src="js/auth.js"></script>
   <script defer src="js/cloud-profile.js"></script>
   <script defer src="js/cloud-progress.js"></script>
+  <script defer src="js/cloud-feedback.js"></script>
 </body>
 </html>

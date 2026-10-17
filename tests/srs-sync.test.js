@@ -25,7 +25,8 @@ function makeEnv() {
   const g = {
     console,
     localStorage: fakeLocalStorage,
-    navigator: {}, /* sin navigator.locks: transición de slots directa */
+    /* 8.6.3: la transición exige exclusión (fail-closed); el arnés aporta un lock. */
+    navigator: { locks: { request: (name, cb) => Promise.resolve().then(cb) } },
     addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
     removeEventListener: () => {},
     setTimeout: () => 0,
@@ -396,7 +397,9 @@ async function main() {
 
   {
     assert(srcProgress.includes('if (!SMR.cloudAvailable || !SMR.cloud || !SMR.progress) return;'), 'guard de módulo sin cloud');
-    assert(srcProgress.includes('if (!runtime.currentUser) return;'), 'guard de pushState sin sesión');
+    /* 8.6.3: el guard también cubre la transición diferida (fail-closed). */
+    assert(srcProgress.includes('if (!runtime.currentUser || runtime.transitionPending) return;'),
+      'guard de pushState sin sesión ni transición pendiente');
   }
   record('C1: contrato de visitante/offline (guards estáticos verificados)');
 

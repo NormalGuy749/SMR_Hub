@@ -82,6 +82,25 @@ function makeBus() {
 
 /* ---------- una pestaña = un contexto JS con el módulo real ---------- */
 
+/* 8.6.3: la transición de slots exige EXCLUSIÓN (fail-closed): sin lock ya no
+   se ejecuta. Este arnés aporta un lock FIFO COMPARTIDO por las pestañas del
+   archivo, para que la suite siga ejerciendo la serialización que comprueba. */
+function makeSharedLocks() {
+  let held = false;
+  const queue = [];
+  function pump() {
+    if (held || !queue.length) return;
+    const e = queue.shift();
+    held = true;
+    Promise.resolve().then(e.cb).then(
+      () => { held = false; e.resolve(); pump(); },
+      () => { held = false; e.resolve(); pump(); }
+    );
+  }
+  return { request(name, cb) { return new Promise((resolve) => { queue.push({ cb, resolve }); pump(); }); } };
+}
+const SHARED_LOCKS = makeSharedLocks();
+
 function makeTab(bus, opts) {
   const o = opts || {};
   const listeners = {};
@@ -129,7 +148,7 @@ function makeTab(bus, opts) {
   const g = {
     console: { log() {}, warn() {}, error() {}, info() {} },
     localStorage: localStorageView,
-    navigator: o.locks ? { locks: o.locks } : {},
+    navigator: o.locks ? { locks: o.locks } : { locks: SHARED_LOCKS },
     addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
     dispatchEvent(ev) { (listeners[ev.type] || []).slice().forEach((fn) => fn(ev)); return true; },
     setTimeout, clearTimeout
@@ -426,22 +445,27 @@ const P = PREFIX;
   })();
   record('transición rezagada de A con B activo: custodia intacta y convergencia al marcador');
 
-  /* 9. Fallo del lock de transición: la transición se ejecuta igual. */
+  /* 9. Lock RECHAZADO: FAIL-CLOSED (8.6.3) — la transición NO se ejecuta. */
   await (async () => {
     const brokenLocks = { request: () => Promise.reject(new Error('document not fully active')) };
-    const { t1, t2 } = twoTabs({ locks1: brokenLocks, locks2: brokenLocks, seed: [
+    const { t1 } = twoTabs({ locks1: brokenLocks, seed: [
       [P + 'liveOwner', JSON.stringify({ owner: '__guest__', v: 1 })],
       [P + 'progress', JSON.stringify(progressWith({ completed: { 'r-visitante': 7 } }))]
     ] });
     t1.auth(user(UID_A));
-    t2.auth(user(UID_A));
     await flush();
-    const snapG = t1.snapshot('__guest__');
-    assert(snapG && snapG.slot.progress.resources.completed['r-visitante'] !== undefined,
-      'con el lock rechazado la transición igualmente custodia el contenido del visitante');
-    assert(t1.marker() === UID_A, 'y fija el marcador del dueño que entra');
+    /* Sin exclusión no se toca el slot: ni se archiva ni se restaura. El
+       contenido del visitante sigue VIVO, así que no se pierde nada. */
+    assert(t1.snapshot('__guest__') === null, 'sin exclusión NO se archiva el slot');
+    assert(t1.marker() === '__guest__',
+      'el marcador queda intacto mientras la transición está diferida: ' + t1.marker());
+    const live = t1.live('progress');
+    assert(live && live.resources.completed['r-visitante'] === 7,
+      'el contenido del visitante sigue vivo y no se pierde: ' + JSON.stringify(live && live.resources.completed));
+    assert(t1.g.SMR.cloudSession.transitionPending() === true,
+      'estado observable: la transición queda diferida');
   })();
-  record('lock de transición rechazado: la transición se ejecuta sin exclusión (sin perderla)');
+  record('lock rechazado: fail-closed — no se archiva, no se pierde y queda observable');
 
   /* 10. Perfil y progreso intactos, y el marcador fuera de los snapshots. */
   await (async () => {
