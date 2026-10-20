@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es" data-theme="light" data-text-size="md" data-animations="on">
 <head>
@@ -6,21 +7,26 @@
   <meta name="color-scheme" content="light dark">
   <meta name="description" id="meta-desc" content="Recursos, tests y herramientas para estudiar Sistemas Microinformáticos y Redes.">
   <title>SMR Hub</title>
-  <!-- FASE 7: favicon provisional en el color de identidad mientras el propietario no incorpora el logo oficial; se sustituira por assets/brand/SMR.png -->
   <link rel="icon" type="image/png" href="assets/brand/SMR.png">
+
   <script>
-    /* Aplica tema y preferencias antes del primer render para evitar parpadeo */
     (function () {
       try {
         var s = JSON.parse(localStorage.getItem('smrhub:settings') || '{}');
-        var dark = s.theme ? s.theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var dark = s.theme
+          ? s.theme === 'dark'
+          : window.matchMedia('(prefers-color-scheme: dark)').matches;
         var root = document.documentElement;
+
         root.dataset.theme = dark ? 'dark' : 'light';
         if (s.textSize) root.dataset.textSize = s.textSize;
         if (s.animations === false) root.dataset.animations = 'off';
-      } catch (e) { /* localStorage no disponible */ }
+      } catch (e) {
+        /* Las preferencias son opcionales. */
+      }
     })();
   </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -28,6 +34,7 @@
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/phase7.css">
 </head>
+
 <body>
   <a class="skip-link" href="#content">Saltar al contenido</a>
 
@@ -35,15 +42,23 @@
     <aside class="sidebar" id="sidebar" aria-label="Barra lateral">
       <div class="sidebar-brand">
         <a class="brand-link" href="#/inicio">
-          <!-- FASE 7: logo oficial del propietario (assets/brand/SMR.png). Si aun no existe, el wordmark mantiene la marca; nunca se genera un sustituto. Mientras falte, su carga produce un unico 404 conocido en consola. -->
-          <img class="brand-logo" src="assets/brand/SMR.png" alt="" width="28" height="28" onload="this.classList.add('is-loaded')" onerror="this.remove()">
+          <img
+            class="brand-logo"
+            src="assets/brand/SMR.png"
+            alt=""
+            width="28"
+            height="28"
+            onload="this.classList.add('is-loaded')"
+            onerror="this.remove()"
+          >
           <span class="brand-word">SMR Hub</span>
         </a>
       </div>
+
       <nav class="sidebar-nav" aria-label="Secciones">
-        <!-- FASE 7: la navegación se agrupa por áreas (buildNav); sin etiqueta estática. -->
         <ul id="nav-list"></ul>
       </nav>
+
       <div class="sidebar-footer">
         <ul id="nav-footer"></ul>
       </div>
@@ -53,21 +68,43 @@
 
     <div class="main">
       <header class="topbar">
-        <button class="icon-btn menu-btn" id="menu-btn" type="button"
-                aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar"></button>
+        <button
+          class="icon-btn menu-btn"
+          id="menu-btn"
+          type="button"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="sidebar"
+        ></button>
+
         <div class="topbar-title">
           <h1 id="page-title">Inicio</h1>
           <p id="page-desc"></p>
         </div>
+
         <div class="topbar-actions">
           <div class="search" id="search" role="search">
             <span class="search-icon" id="search-icon" aria-hidden="true"></span>
-            <input type="search" class="input search-input" id="search-input"
-                  placeholder="Buscar" aria-label="Buscar" autocomplete="off" spellcheck="false">
+            <input
+              type="search"
+              class="input search-input"
+              id="search-input"
+              placeholder="Buscar"
+              aria-label="Buscar"
+              autocomplete="off"
+              spellcheck="false"
+            >
             <div class="search-results" id="search-results" hidden></div>
           </div>
-          <button class="icon-btn palette-btn" id="palette-btn" type="button"
-                  title="Búsqueda global (Ctrl+K)" aria-label="Abrir búsqueda global (Ctrl+K)"></button>
+
+          <button
+            class="icon-btn palette-btn"
+            id="palette-btn"
+            type="button"
+            title="Búsqueda global (Ctrl+K)"
+            aria-label="Abrir búsqueda global (Ctrl+K)"
+          ></button>
+
           <button class="icon-btn" id="theme-btn" type="button"></button>
         </div>
       </header>
@@ -76,8 +113,6 @@
     </div>
   </div>
 
-  <!-- Fase 5.6: navegación inferior para pantallas pequeñas.
-      No sustituye al sidebar: se muestra únicamente por debajo de 860px. -->
   <nav class="mobile-nav" id="mobile-nav" aria-label="Navegación principal"></nav>
 
   <script src="js/data.js" defer></script>
@@ -94,17 +129,18 @@
   <script src="js/profile.js" defer></script>
   <script src="js/app.js" defer></script>
 
-  <!-- Fase 8.2: Auth de Supabase. Orden de ejecución garantizado por defer:
-      SDK CDN → cloud-config.public (SIN .js: es la ruta que genera Pages para
-      la Function functions/js/cloud-config.public.js, quitándole la última
-      extensión; en local esa ruta no existe y su fallo es inocuo, porque la
-      configuración local llega por cloud-config.js)
-      → cloud-config (overrides SOLO del stack local) → supabase.js (cliente)
-      → auth.js (UI/estado). Si el CDN falla, no hay red o no hay configuración
-      pública, la app sigue siendo 100% local: el visitante estudia sin Supabase.
-      Ver DESPLIEGUE.md para el contrato de configuración. -->
+  <!-- Carga la configuración pública antes de los scripts defer de Supabase. -->
+  <script>
+    (function () {
+      var configSrc = window.location.hostname === 'normalguy749.github.io'
+        ? 'https://smr-hub.pages.dev/js/cloud-config.public'
+        : 'js/cloud-config.public';
+
+      document.write('<script src="' + configSrc + '"><\/script>');
+    })();
+  </script>
+
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script defer src="js/cloud-config.public"></script>
   <script defer src="js/cloud-config.js"></script>
   <script defer src="js/supabase.js"></script>
   <script defer src="js/auth.js"></script>
