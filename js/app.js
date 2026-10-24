@@ -3238,10 +3238,15 @@ function renderEstadisticas(root) {
 
 /* ---------- Rutas ---------- */
 
+/* Título de pestaña y de resultado de búsqueda: la portada usa un título
+   descriptivo (es la única URL indexable); el resto, «Vista · SMR Hub». */
+const titleFor = (route) => (route && route.seoTitle) || (route ? `${route.title} · SMR Hub` : 'SMR Hub');
+
 const ROUTES = {
   inicio: {
     title: 'Inicio',
     desc: 'Tu panel de estudio de Sistemas Microinformáticos y Redes.',
+    seoTitle: 'SMR Hub — Tests y recursos de Sistemas Microinformáticos y Redes',
     icon: 'home',
     render: renderHome
   },
@@ -3273,13 +3278,13 @@ const ROUTES = {
     title: 'Herramientas',
     desc: 'Calculadoras y conversores de uso frecuente.',
     icon: 'wrench',
-    render: (root) => window.SMR_TOOLS.render(root)
+    render: (root) => { if (!window.SMR_TOOLS) throw new Error('SMR_TOOLS no disponible'); window.SMR_TOOLS.render(root); }
   },
   tests: {
     title: 'Tests',
     desc: 'Cuestionarios de autoevaluación por módulo.',
     icon: 'clipboard',
-    render: (root) => window.SMR_TESTS.render(root)
+    render: (root) => { if (!window.SMR_TESTS) throw new Error('SMR_TESTS no disponible'); window.SMR_TESTS.render(root); }
   },
   glosario: {
     title: 'Glosario',
@@ -3432,15 +3437,26 @@ function render() {
   setActiveNav(id);
   dom.pageTitle.textContent = route.title;
   dom.pageDesc.textContent = route.desc;
-  document.title = `${route.title} · SMR Hub`;
+  document.title = titleFor(route);
   const metaDesc = document.querySelector('meta[name="description"]');
   if (metaDesc) metaDesc.setAttribute('content', route.desc);
   dom.content.replaceChildren();
   if (window.SMR_TESTS && typeof window.SMR_TESTS.stop === 'function') window.SMR_TESTS.stop();
   stopStudyClock();
   studyState.active = false;
-  route.render(dom.content);
-  SMR.activeQuery = new URLSearchParams(); // la consulta se consume al renderizar
+  try {
+    route.render(dom.content);
+  } catch (err) {
+    /* Una vista rota no puede dejar la app en blanco ni arrastrar su query. */
+    if (window.console) window.console.warn('[SMR render]', id, err);
+    dom.content.innerHTML =
+      '<div class="empty">' +
+        '<p class="empty-title">No se pudo cargar esta vista</p>' +
+        '<p class="empty-text">Vuelve a intentarlo desde el menú o recarga la página.</p>' +
+      '</div>';
+  } finally {
+    SMR.activeQuery = new URLSearchParams(); // la consulta se consume al renderizar
+  }
   closeDrawer();
   window.scrollTo(0, 0);
 }
@@ -3782,8 +3798,7 @@ function init() {
   });
 
   window.addEventListener('hashchange', render);
-  window.addEventListener('hashchange', () => { const h = parseHash(); document.title = (ROUTES[h.id] ? ROUTES[h.id].title + ' · ' : '') + 'SMR Hub'; });
-  (() => { const h = parseHash(); document.title = (ROUTES[h.id] ? ROUTES[h.id].title + ' · ' : '') + 'SMR Hub'; })();
+  document.title = titleFor(ROUTES[parseHash().id]);
   updateThemeButton();
   render();
 
