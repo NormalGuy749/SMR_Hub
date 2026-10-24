@@ -885,17 +885,17 @@ function trapTabKey(event, box) {
   }
 }
 
-/* ---------- Consultas de ruta (p. ej. #/recursos?q=...) ---------- */
+/* ---------- Consultas de ruta (p. ej. /recursos?q=...) ---------- */
 
 SMR.activeQuery = new URLSearchParams();
 
 /* ---------- Elementos comunes ---------- */
 
 const HOME_TOOLS = [
-  { icon: 'calculator', title: 'Calculadora de subredes', desc: 'Red, broadcast, rango de hosts y máscara a partir de una IP y su prefijo.', hash: '#/herramientas?tool=subredes' },
-  { icon: 'repeat', title: 'Conversor numérico', desc: 'Decimal, binario, hexadecimal y octal en vivo.', hash: '#/herramientas?tool=conversor' },
-  { icon: 'network', title: 'Tabla de puertos', desc: 'Puertos TCP y UDP habituales con su servicio y descripción.', hash: '#/herramientas?tool=puertos' },
-  { icon: 'star', title: 'Generador de contraseñas', desc: 'Contraseñas seguras generadas íntegramente en tu navegador.', hash: '#/herramientas?tool=contrasenas' }
+  { icon: 'calculator', title: 'Calculadora de subredes', desc: 'Red, broadcast, rango de hosts y máscara a partir de una IP y su prefijo.', path: '/herramientas?tool=subredes' },
+  { icon: 'repeat', title: 'Conversor numérico', desc: 'Decimal, binario, hexadecimal y octal en vivo.', path: '/herramientas?tool=conversor' },
+  { icon: 'network', title: 'Tabla de puertos', desc: 'Puertos TCP y UDP habituales con su servicio y descripción.', path: '/herramientas?tool=puertos' },
+  { icon: 'star', title: 'Generador de contraseñas', desc: 'Contraseñas seguras generadas íntegramente en tu navegador.', path: '/herramientas?tool=contrasenas' }
 ];
 
 /* Herramientas y test sugeridos según la categoría del recurso */
@@ -920,14 +920,14 @@ const CATEGORY_TEST = {
 };
 
 const QUICK_ACTIONS = [
-  { icon: 'brain', label: 'Modo estudio', hash: '#/estudio' },
-  { icon: 'book', label: 'Recursos', hash: '#/recursos' },
-  { icon: 'clipboard', label: 'Tests', hash: '#/tests' },
-  { icon: 'target', label: 'Repasar errores', hash: '#/tests?mode=errores' },
-  { icon: 'layers', label: 'Casos prácticos', hash: '#/casos' },
-  { icon: 'compass', label: '¿Qué estudiar después?', hash: '#/mapa' },
-  { icon: 'wrench', label: 'Herramientas', hash: '#/herramientas' },
-  { icon: 'bookOpen', label: 'Glosario', hash: '#/glosario' }
+  { icon: 'brain', label: 'Modo estudio', path: '/estudio' },
+  { icon: 'book', label: 'Recursos', path: '/recursos' },
+  { icon: 'clipboard', label: 'Tests', path: '/tests' },
+  { icon: 'target', label: 'Repasar errores', path: '/tests?mode=errores' },
+  { icon: 'layers', label: 'Casos prácticos', path: '/casos' },
+  { icon: 'compass', label: '¿Qué estudiar después?', path: '/mapa' },
+  { icon: 'wrench', label: 'Herramientas', path: '/herramientas' },
+  { icon: 'bookOpen', label: 'Glosario', path: '/glosario' }
 ];
 
 /* ---------- Utilidades de presentación ---------- */
@@ -1044,8 +1044,8 @@ function renderHome(root) {
         <h2>SMR Hub</h2>
         <p>Recursos, tests y herramientas para Sistemas Microinformáticos y Redes. Todo se guarda en tu navegador: no necesitas cuenta.</p>
         <div class="hero-actions">
-          <a class="btn btn-primary" href="#/estudio">${SMR.icon('brain', 15)} Modo estudio</a>
-          <a class="btn" href="#/recursos">${SMR.icon('book', 15)} Explorar recursos</a>
+          <a class="btn btn-primary" href="/estudio">${SMR.icon('brain', 15)} Modo estudio</a>
+          <a class="btn" href="/recursos">${SMR.icon('book', 15)} Explorar recursos</a>
           <button type="button" class="btn" data-palette>${SMR.icon('search', 15)} Buscar <kbd class="kbd">Ctrl K</kbd></button>
         </div>
       </div>
@@ -1062,7 +1062,7 @@ function renderHome(root) {
       </div>
       ${next.kind === 'recurso'
         ? `<button type="button" class="btn btn-primary" data-open-res="${next.item.id}">Continuar</button>`
-        : `<a class="btn btn-primary" href="#/tests?test=${next.item.testId}">Repetir test</a>`}
+        : `<a class="btn btn-primary" href="/tests?test=${next.item.testId}">Repetir test</a>`}
     </section>` : `
     <section class="panel continue-panel" aria-label="Primeros pasos">
       <div class="continue-main">
@@ -1070,7 +1070,7 @@ function renderHome(root) {
         <h3 class="continue-title">Empieza con una sesión de estudio guiada</h3>
         <p class="continue-meta">10 minutos bastan: el Modo Estudio mezcla lecciones cortas, recursos y preguntas.</p>
       </div>
-      <a class="btn btn-primary" href="#/estudio">Probar el modo estudio</a>
+      <a class="btn btn-primary" href="/estudio">Probar el modo estudio</a>
     </section>`}
 
     <div class="home-grid">
@@ -1109,12 +1109,12 @@ function renderHome(root) {
         <h3 class="section-label" id="home-actions">Acciones rápidas</h3>
         <div class="quick-actions">
           ${QUICK_ACTIONS.map((a) => `
-            <a class="quick-action" href="${a.hash}">${SMR.icon(a.icon, 18)}<span>${SMR.esc(a.label)}</span></a>`).join('')}
+            <a class="quick-action" href="${a.path}">${SMR.icon(a.icon, 18)}<span>${SMR.esc(a.label)}</span></a>`).join('')}
         </div>
         <h3 class="section-label follow-label">Herramientas destacadas</h3>
         <ul class="link-list compact">
           ${HOME_TOOLS.slice(0, 3).map((t) => `
-            <li><a class="link-row" href="${t.hash}">
+            <li><a class="link-row" href="${t.path}">
               ${SMR.icon(t.icon)}
               <span class="link-row-text">
                 <span class="link-row-title">${SMR.esc(t.title)}</span>
@@ -1139,7 +1139,7 @@ function renderHome(root) {
         </div>
         <div class="profile-card-actions">
           <button type="button" class="btn btn-sm" data-edit-profile>${SMR.profile.isConfigured() ? 'Editar' : 'Configurar'}</button>
-          <a class="btn btn-sm btn-primary" href="#/mi-smr">Ver mi currículo</a>
+          <a class="btn btn-sm btn-primary" href="/mi-smr">Ver mi currículo</a>
         </div>
       </div>
     </section>
@@ -1163,7 +1163,7 @@ function renderHome(root) {
         <p class="empty-title">Has completado todo el catálogo</p>
         <p class="empty-text">Repasa con un test o una sesión de estudio para mantener el ritmo.</p>
         <div class="empty-actions">
-          <a class="btn btn-primary" href="#/tests">Hacer un test</a>
+          <a class="btn btn-primary" href="/tests">Hacer un test</a>
         </div>
       </div>`}
     </section>
@@ -1183,7 +1183,7 @@ function renderHome(root) {
                 ${SMR.icon('chevronRight')}
               </button></li>`).join('')}
             ${favoriteTerms.map((t) => `
-              <li><a class="link-row" href="#/glosario?q=${encodeURIComponent(t.term)}">
+              <li><a class="link-row" href="/glosario?q=${encodeURIComponent(t.term)}">
                 ${SMR.icon('bookOpen')}
                 <span class="link-row-text">
                   <span class="link-row-title">${SMR.esc(t.term)}</span>
@@ -1314,8 +1314,8 @@ function relatedChips(items, { icon = 'chevronRight', accent = false } = {}) {
   return `
     <div class="tag-row">
       ${items.map((item) => {
-        if (item.hash) {
-          return `<button type="button" class="tag${accent ? ' tag-accent' : ''}" data-nav="${item.hash}">${SMR.icon(icon, 13)} ${SMR.esc(item.label)}</button>`;
+        if (item.path) {
+          return `<button type="button" class="tag${accent ? ' tag-accent' : ''}" data-nav="${item.path}">${SMR.icon(icon, 13)} ${SMR.esc(item.label)}</button>`;
         }
         return `<button type="button" class="tag${accent ? ' tag-accent' : ''}" data-open-res="${item.id}">${SMR.icon('fileText', 13)} ${SMR.esc(item.label)}</button>`;
       }).join('')}
@@ -1336,7 +1336,7 @@ function openResource(id) {
         <div class="empty empty-inline">
           <p class="empty-title">No encontramos este recurso</p>
           <p class="empty-text">Puede que el enlace esté desactualizado. Explora el catálogo completo.</p>
-          <a class="btn btn-primary" href="#/recursos">Ir a recursos</a>
+          <a class="btn btn-primary" href="/recursos">Ir a recursos</a>
         </div>`;
       box.querySelector('.modal-close').addEventListener('click', SMR.modal.close);
     });
@@ -1418,8 +1418,8 @@ function openResource(id) {
 
       ${(related.length || tools.length || test) ? lessonSection('Relacionado con este tema', `
         ${relatedChips(related.map((x) => ({ id: x.id, label: x.title })))}
-        ${relatedChips(tools.map(([tool, label]) => ({ hash: `#/herramientas?tool=${encodeURIComponent(tool)}`, label })), { icon: 'wrench', accent: true })}
-        ${relatedChips(test ? [{ hash: `#/tests?test=${test.id}`, label: test.title }] : [], { icon: 'clipboard', accent: true })}`) : ''}
+        ${relatedChips(tools.map(([tool, label]) => ({ path: `/herramientas?tool=${encodeURIComponent(tool)}`, label })), { icon: 'wrench', accent: true })}
+        ${relatedChips(test ? [{ path: `/tests?test=${test.id}`, label: test.title }] : [], { icon: 'clipboard', accent: true })}`) : ''}
 
       <div class="modal-foot">
         <button type="button" class="btn fav-text" data-fav="recurso:${r.id}" aria-pressed="${fav}">
@@ -1433,7 +1433,7 @@ function openResource(id) {
       <nav class="res-nav" aria-label="Navegación entre recursos">
         ${prevRes ? `<button type="button" class="btn btn-sm" data-open-res="${prevRes.id}">${SMR.icon('chevronLeft', 14)} ${SMR.esc(prevRes.title)}</button>`
                   : '<span></span>'}
-        <button type="button" class="btn btn-sm" data-nav="#/recursos">${SMR.icon('layers', 14)} Volver al módulo</button>
+        <button type="button" class="btn btn-sm" data-nav="/recursos">${SMR.icon('layers', 14)} Volver al módulo</button>
         ${nextRes ? `<button type="button" class="btn btn-sm" data-open-res="${nextRes.id}">${SMR.esc(nextRes.title)} ${SMR.icon('chevronRight', 14)}</button>`
                   : '<span></span>'}
       </nav>`;
@@ -2254,7 +2254,7 @@ function renderProfileSetup(box) {
     if (!saved) return;
     SMR.modal.close();
     // Repintar las vistas que derivan del perfil para que reflejen la selección nueva.
-    const route = parseHash().id;
+    const route = parsePath(currentPath()).id;
     if (route === 'inicio' || route === 'mi-smr' || route === 'curriculo') render();
   });
 
@@ -2316,7 +2316,7 @@ function renderMiSMR(root) {
         </div>
         <div class="profile-card-actions">
           <button type="button" class="btn" data-edit-profile>Editar perfil académico</button>
-          <a class="btn btn-primary" href="#/curriculo">Ver currículo</a>
+          <a class="btn btn-primary" href="/curriculo">Ver currículo</a>
         </div>
       </div>
       ${status && curriculum && curriculum.status === 'PARTIALLY_VERIFIED' ? `<div class="notice curr-alert curr-alert--warn"><strong>Verificación parcial.</strong> Se muestran solo los datos comprobados; las limitaciones están en la ficha del currículo.</div>` : ''}
@@ -2672,7 +2672,7 @@ function renderStudySetup(root) {
           <p class="section-label">${SMR.icon('target', 13)} Tienes ${wrong} ${wrong === 1 ? 'pregunta fallada' : 'preguntas falladas'}</p>
           <p class="error-review-text">La sesión priorizará los temas de esas preguntas.</p>
         </div>
-        <a class="btn" href="#/tests?mode=errores">Solo repaso de errores</a>
+        <a class="btn" href="/tests?mode=errores">Solo repaso de errores</a>
       </section>` : ''}
 
     <div class="study-durations" role="group" aria-label="Duración de la sesión">
@@ -2893,8 +2893,8 @@ function finishStudy(root, auto) {
       <p class="empty-title">Sesión completada${auto ? ' (tiempo agotado)' : ''}</p>
       <p class="empty-text">Has repasado ${stepsDone} pasos en unos ${elapsedMin} minutos. La sesión quedó registrada en tu actividad y suma a tu racha.</p>
       <div class="empty-actions">
-        <a class="btn btn-primary" href="#/estudio">Otra sesión</a>
-        <a class="btn" href="#/estadisticas">Ver estadísticas</a>
+        <a class="btn btn-primary" href="/estudio">Otra sesión</a>
+        <a class="btn" href="/estadisticas">Ver estadísticas</a>
       </div>
     </div>`;
 }
@@ -2974,7 +2974,7 @@ function renderCasos(root) {
         ${SMR.icon('layers', 22)}
         <p class="empty-title">Todavía no hay casos disponibles</p>
         <p class="empty-text">Los casos prácticos proponen escenarios reales para decidir como profesional.</p>
-        <div class="empty-actions"><a class="btn btn-primary" href="#/recursos">Estudiar recursos</a></div>
+        <div class="empty-actions"><a class="btn btn-primary" href="/recursos">Estudiar recursos</a></div>
       </div>`;
     return;
   }
@@ -3115,8 +3115,8 @@ function renderEstadisticas(root) {
         <p class="empty-title">Todavía no hay datos que mostrar</p>
         <p class="empty-text">Estudia un recurso o completa un test y tus estadísticas aparecerán aquí. Todo se guarda en este navegador.</p>
         <div class="empty-actions">
-          <a class="btn btn-primary" href="#/estudio">Probar el modo estudio</a>
-          <a class="btn" href="#/recursos">Explorar recursos</a>
+          <a class="btn btn-primary" href="/estudio">Probar el modo estudio</a>
+          <a class="btn" href="/recursos">Explorar recursos</a>
         </div>
       </div>`;
     return;
@@ -3210,7 +3210,7 @@ function renderEstadisticas(root) {
             ${SMR.icon('clipboard', 20)}
             <p class="empty-title">Sin tests realizados</p>
             <p class="empty-text">Completa un test para ver aquí tu historial.</p>
-            <a class="btn" href="#/tests">Ir a tests</a>
+            <a class="btn" href="/tests">Ir a tests</a>
           </div>`}
       </section>
 
@@ -3225,7 +3225,7 @@ function renderEstadisticas(root) {
               </li>`).join('')}
           </ul>
           <div class="quiz-actions">
-            <a class="btn btn-primary" href="#/tests?mode=errores">Repasar errores</a>
+            <a class="btn btn-primary" href="/tests?mode=errores">Repasar errores</a>
           </div>` : `
           <div class="empty empty-inline">
             ${SMR.icon('circleCheck', 20)}
@@ -3238,14 +3238,22 @@ function renderEstadisticas(root) {
 
 /* ---------- Rutas ---------- */
 
+/* Origen canónico: canonical y og:url se construyen con esto y no con el host
+   que sirva la petición (preview de Pages, 127.0.0.1, dominio espejo). */
+const SITE_ORIGIN = 'https://smr-hub.pages.dev';
+
+/* Una ruta = una URL limpia: la portada es '/', el resto '/<id>'. */
+const pathFor = (id) => (id === 'inicio' ? '/' : '/' + id);
+
 /* Título de pestaña y de resultado de búsqueda: la portada usa un título
-   descriptivo (es la única URL indexable); el resto, «Vista · SMR Hub». */
+   descriptivo; el resto, «Vista · SMR Hub». */
 const titleFor = (route) => (route && route.seoTitle) || (route ? `${route.title} · SMR Hub` : 'SMR Hub');
 
 const ROUTES = {
   inicio: {
     title: 'Inicio',
     desc: 'Tu panel de estudio de Sistemas Microinformáticos y Redes.',
+    keywords: ['SMR Hub', 'Sistemas Microinformáticos y Redes', 'tests SMR', 'recursos FP'],
     seoTitle: 'SMR Hub — Tests y recursos de Sistemas Microinformáticos y Redes',
     icon: 'home',
     render: renderHome
@@ -3253,78 +3261,98 @@ const ROUTES = {
   estudio: {
     title: 'Modo estudio',
     desc: 'Sesiones guiadas de 10, 20 o 30 minutos, o libres, con lo que más te conviene repasar.',
+    keywords: ['modo estudio', 'sesiones de estudio', 'repaso SMR'],
     icon: 'brain',
     render: renderEstudio
   },
   recursos: {
     title: 'Recursos',
     desc: 'Materiales de estudio organizados por módulos del ciclo.',
+    keywords: ['recursos SMR', 'apuntes ciclo medio', 'materiales informática'],
     icon: 'book',
     render: renderRecursos
   },
   redes: {
     title: 'Redes',
     desc: 'Modelos de referencia, direccionamiento IP y servicios de red.',
+    keywords: ['redes', 'direccionamiento IP', 'modelo OSI', 'subredes'],
     icon: 'network',
     render: renderRedes
   },
   sistemas: {
     title: 'Sistemas',
     desc: 'Sistemas operativos, archivos, procesos, servicios y comandos.',
+    keywords: ['sistemas operativos', 'procesos', 'servicios', 'comandos'],
     icon: 'cpu',
     render: renderSistemas
   },
   herramientas: {
     title: 'Herramientas',
     desc: 'Calculadoras y conversores de uso frecuente.',
+    keywords: ['calculadora de subredes', 'conversor numérico', 'tabla de puertos', 'generador de contraseñas'],
     icon: 'wrench',
     render: (root) => { if (!window.SMR_TOOLS) throw new Error('SMR_TOOLS no disponible'); window.SMR_TOOLS.render(root); }
   },
   tests: {
     title: 'Tests',
     desc: 'Cuestionarios de autoevaluación por módulo.',
+    keywords: ['tests SMR', 'cuestionarios', 'autoevaluación'],
     icon: 'clipboard',
     render: (root) => { if (!window.SMR_TESTS) throw new Error('SMR_TESTS no disponible'); window.SMR_TESTS.render(root); }
+  },
+  exportar: {
+    title: 'Exportar examen',
+    desc: 'Genera un examen de SMR en PDF con hoja de soluciones, listo para imprimir.',
+    keywords: ['generar examen SMR', 'examen en PDF', 'ficha de estudio para imprimir'],
+    icon: 'fileText',
+    render: (root) => { if (!SMR.pdfExport) throw new Error('SMR.pdfExport no disponible'); SMR.pdfExport.render(root); }
   },
   glosario: {
     title: 'Glosario',
     desc: 'Definiciones de los términos técnicos del ciclo.',
+    keywords: ['glosario informático', 'términos técnicos'],
     icon: 'bookOpen',
     render: renderGlosario
   },
   casos: {
     title: 'Casos prácticos',
     desc: 'Escenarios reales: elige la solución y compara con la explicación.',
+    keywords: ['casos prácticos', 'escenarios reales', 'ejercicios resueltos'],
     icon: 'layers',
     render: renderCasos
   },
   mapa: {
     title: '¿Qué estudiar después?',
     desc: 'Rutas de aprendizaje: qué conceptos dependen de otros y por dónde continuar.',
+    keywords: ['ruta de aprendizaje', 'qué estudiar después'],
     icon: 'compass',
     render: renderMapa
   },
   estadisticas: {
     title: 'Estadísticas',
     desc: 'Tu progreso, historial de tests y preguntas para repasar.',
+    keywords: ['estadísticas de estudio', 'progreso', 'historial de tests'],
     icon: 'chart',
     render: renderEstadisticas
   },
   curriculo: {
     title: 'Mi currículo',
     desc: 'Consulta el plan de estudios de SMR según tu comunidad.',
+    keywords: ['currículo SMR', 'plan de estudios', 'comunidades autónomas'],
     icon: 'bookOpen',
     render: renderCurriculo
   },
   'mi-smr': {
     title: 'Mi SMR',
     desc: 'Tu contexto académico: comunidad, curso y módulos que te corresponden.',
+    keywords: ['mi SMR', 'módulos', 'curso académico'],
     icon: 'target',
     render: renderMiSMR
   },
   configuracion: {
     title: 'Configuración',
     desc: 'Preferencias de la aplicación.',
+    keywords: ['configuración', 'preferencias'],
     icon: 'settings',
     render: renderSettings
   }
@@ -3333,7 +3361,7 @@ const ROUTES = {
 /* FASE 7: navegacion agrupada por areas. Mismas rutas, mas jerarquia. */
 const NAV_GROUPS = [
   { label: 'Personal', items: ['inicio', 'mi-smr'] },
-  { label: 'Estudio', items: ['estudio', 'tests'] },
+  { label: 'Estudio', items: ['estudio', 'tests', 'exportar'] },
   { label: 'Contenido', items: ['recursos', 'redes', 'sistemas', 'casos', 'glosario', 'mapa'] },
   { label: 'Curriculo', items: ['curriculo'] },
   { label: 'Herramientas', items: ['herramientas', 'estadisticas'] }
@@ -3347,7 +3375,7 @@ function buildNav() {
     const route = ROUTES[id];
     const li = document.createElement('li');
     li.innerHTML =
-      `<a class="nav-link" href="#/${id}" data-route="${id}">` +
+      `<a class="nav-link" href="${pathFor(id)}" data-route="${id}">` +
       `${SMR.icon(route.icon)}<span>${route.title}</span></a>`;
     return li;
   };
@@ -3388,7 +3416,7 @@ function buildMobileNav() {
 
   const item = (id, label) => {
     const route = ROUTES[id];
-    return `<a class="mobile-nav-link" href="#/${id}" data-route="${id}">` +
+    return `<a class="mobile-nav-link" href="${pathFor(id)}" data-route="${id}">` +
       `${SMR.icon(route.icon, 20)}<span>${SMR.esc(label)}</span></a>`;
   };
 
@@ -3410,26 +3438,79 @@ function setActiveMobileNav(id) {
   });
 }
 
-/* ---------- Router por hash (con consulta opcional: #/recursos?q=...) ---------- */
+/* ---------- Router (History API; consulta opcional: /recursos?q=...) ----------
+   Ruta pedida. En file:// no hay History API utilizable, así que la navegación
+   se queda en el hash: es el único modo degradado y solo afecta a abrir el
+   index.html desde disco. */
+function currentPath() {
+  return location.protocol === 'file:'
+    ? (location.hash.slice(1) || '/')
+    : location.pathname + location.search;
+}
 
-function parseHash() {
-  const raw = location.hash.replace(/^#\/?/, '');
-  const [path, query] = raw.split('?');
+function parsePath(urlPath) {
+  const raw = urlPath || '/';
+  const cut = raw.indexOf('?');
+  const path = (cut === -1 ? raw : raw.slice(0, cut)).replace(/\/+$/, '');
   return {
-    id: path ? path.split('/')[0].toLowerCase() : 'inicio',
-    query: new URLSearchParams(query || '')
+    id: (path.split('/').filter(Boolean)[0] || 'inicio').toLowerCase(),
+    query: new URLSearchParams(cut === -1 ? '' : raw.slice(cut + 1))
   };
 }
 
 function currentRouteId() {
-  const { id } = parseHash();
+  const { id } = parsePath(currentPath());
   return Object.prototype.hasOwnProperty.call(ROUTES, id) ? id : null;
 }
 
+/* Metadatos de la vista montada: un solo sitio para las ocho etiquetas. */
+function updateMetadata(route, id) {
+  const title = titleFor(route);
+  const url = SITE_ORIGIN + pathFor(id);
+  document.title = title;
+  const meta = (selector, value) => {
+    const el = document.querySelector(selector);
+    if (el) el.setAttribute('content', value);
+  };
+  meta('meta[name="description"]', route.desc);
+  meta('meta[name="keywords"]', (route.keywords || []).join(', '));
+  meta('meta[property="og:title"]', title);
+  meta('meta[property="og:description"]', route.desc);
+  meta('meta[property="og:url"]', url);
+  meta('meta[name="twitter:title"]', title);
+  meta('meta[name="twitter:description"]', route.desc);
+  const canonical = document.querySelector('link[rel="canonical"]');
+  if (canonical) canonical.setAttribute('href', url);
+}
+
+/* Compatibilidad: enlaces antiguos (#/tests) y el /inicio heredado pasan a su
+   URL limpia sin dejar una entrada de historial. */
+function canonicalizeUrl() {
+  if (location.protocol === 'file:') return;
+  if (location.hash.indexOf('#/') === 0) {
+    const legacy = location.hash.slice(1).replace(/^\/inicio(?=[?/]|$)/, '/');
+    history.replaceState({}, '', legacy);
+    return;
+  }
+  if (location.pathname === '/inicio') history.replaceState({}, '', '/' + location.search);
+}
+
+/* 404.html deja aquí la ruta pedida antes de enviar a '/'. */
+function restorePathFrom404() {
+  try {
+    const saved = sessionStorage.getItem('smrhub:path');
+    if (!saved) return;
+    sessionStorage.removeItem('smrhub:path');
+    if (location.protocol !== 'file:' && location.pathname === '/' && saved !== '/') {
+      history.replaceState({}, '', saved);
+    }
+  } catch { /* sin sessionStorage: se queda en la portada */ }
+}
+
 function render() {
-  const { id, query } = parseHash();
+  const { id, query } = parsePath(currentPath());
   if (!currentRouteId()) {
-    location.replace('#/inicio');
+    SMR.navigate(pathFor('inicio'), true);
     return;
   }
   SMR.activeQuery = query;
@@ -3437,10 +3518,12 @@ function render() {
   setActiveNav(id);
   dom.pageTitle.textContent = route.title;
   dom.pageDesc.textContent = route.desc;
-  document.title = titleFor(route);
-  const metaDesc = document.querySelector('meta[name="description"]');
-  if (metaDesc) metaDesc.setAttribute('content', route.desc);
+  updateMetadata(route, id);
   dom.content.replaceChildren();
+  /* El examen impreso vive fuera de .app: al cambiar de vista no puede
+     quedarse ahí, o un Ctrl+P en /tests imprimiría el examen anterior. */
+  const printView = document.getElementById('exam-print-view');
+  if (printView) printView.remove();
   if (window.SMR_TESTS && typeof window.SMR_TESTS.stop === 'function') window.SMR_TESTS.stop();
   stopStudyClock();
   studyState.active = false;
@@ -3461,10 +3544,13 @@ function render() {
   window.scrollTo(0, 0);
 }
 
-SMR.navigate = (hash) => {
-  /* Si el hash es idéntico al actual no hay hashchange: re-render manual */
-  if (location.hash === hash) render();
-  else location.hash = hash;
+SMR.navigate = (path, replace = false) => {
+  /* file://: sin History API se navega por hash (hashchange vuelve a pintar). */
+  if (location.protocol === 'file:') { location.hash = path; return; }
+  /* Misma URL: no hay popstate, así que se repinta a mano. */
+  if (path === location.pathname + location.search) { render(); return; }
+  history[replace ? 'replaceState' : 'pushState']({}, '', path);
+  render();
 };
 
 /* ---------- Buscador global ---------- */
@@ -3484,7 +3570,7 @@ function buildSearchIndex() {
       title: route.title,
       meta: 'Sección',
       group: 'Secciones',
-      hash: `#/${id}`,
+      path: pathFor(id),
       text: `${route.title} ${route.desc}`.toLowerCase()
     }))
   );
@@ -3495,7 +3581,7 @@ function buildSearchIndex() {
       title: r.title,
       meta: `Recurso · ${r.category}`,
       group: 'Recursos',
-      hash: `#/recursos?q=${encodeURIComponent(r.title)}`,
+      path: `/recursos?q=${encodeURIComponent(r.title)}`,
       text: `${r.title} ${r.desc} ${r.category} ${r.level} ${(r.content || []).join(' ')}`.toLowerCase()
     }))
   );
@@ -3506,7 +3592,7 @@ function buildSearchIndex() {
       title: t.term,
       meta: `Glosario · ${t.category || 'General'}`,
       group: 'Glosario',
-      hash: `#/glosario?q=${encodeURIComponent(t.term)}`,
+      path: `/glosario?q=${encodeURIComponent(t.term)}`,
       text: `${t.term} ${t.definition}`.toLowerCase()
     }))
   );
@@ -3536,7 +3622,7 @@ function wireSearch() {
 
     dom.searchPanel.innerHTML = hits.length
       ? hits.map((e) =>
-          `<button type="button" class="search-item" data-hash="${e.hash}">` +
+          `<button type="button" class="search-item" data-path="${e.path}">` +
           `<span class="search-item-title">${SMR.esc(e.title)}</span>` +
           `<span class="search-item-meta">${SMR.esc(e.meta)}</span></button>`
         ).join('')
@@ -3550,7 +3636,7 @@ function wireSearch() {
   dom.searchPanel.addEventListener('click', (event) => {
     const item = event.target.closest('.search-item');
     if (!item) return;
-    SMR.navigate(item.dataset.hash);
+    SMR.navigate(item.dataset.path);
     dom.searchInput.value = '';
     closePanel();
     dom.searchInput.blur();
@@ -3664,7 +3750,7 @@ function paletteChoose(index) {
   const item = paletteState.items[index];
   if (!item) return;
   closePalette();
-  SMR.navigate(item.hash);
+  SMR.navigate(item.path);
 }
 
 function openPalette() {
@@ -3738,6 +3824,8 @@ function wirePalette() {
       else openPalette();
     }
   });
+  /* Cerrar la palette al navegar: popstate en http(s), hashchange en file://. */
+  window.addEventListener('popstate', closePalette);
   window.addEventListener('hashchange', closePalette);
 }
 
@@ -3760,6 +3848,25 @@ function closeDrawer() {
   window.setTimeout(() => {
     if (!dom.sidebar.classList.contains('open')) dom.scrim.hidden = true;
   }, 200);
+}
+
+/* ---------- Navegación por enlaces ----------
+   Un solo interceptor para todos los <a> internos: sin él, cada enlace haría
+   una recarga completa y se perdería el estado de la SPA. Se ignoran anclas
+   (#content), enlaces externos, target=_blank, descargas y clics modificados. */
+function wireLinks() {
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 ||
+        event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest ? event.target.closest('a[href]') : null;
+    if (!link || link.target || link.hasAttribute('download')) return;
+    const href = link.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return;
+    const url = new URL(link.href, location.href);
+    if (url.origin !== location.origin) return;
+    event.preventDefault();
+    SMR.navigate(url.pathname + url.search);
+  });
 }
 
 function wireDrawer() {
@@ -3791,14 +3898,18 @@ function init() {
     }
   });
 
-  /* El enlace "saltar al contenido" no debe chocar con el router de hash */
+  /* El enlace "saltar al contenido" no debe chocar con el router */
   $('.skip-link').addEventListener('click', (event) => {
     event.preventDefault();
     dom.content.focus();
   });
 
-  window.addEventListener('hashchange', render);
-  document.title = titleFor(ROUTES[parseHash().id]);
+  /* Ruta pedida desde el 404 y enlaces antiguos (#/vista) → URL limpia. */
+  restorePathFrom404();
+  canonicalizeUrl();
+  wireLinks();
+  window.addEventListener('popstate', render);
+  if (location.protocol === 'file:') window.addEventListener('hashchange', render);
   updateThemeButton();
   render();
 
