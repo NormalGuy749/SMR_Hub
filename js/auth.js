@@ -34,11 +34,26 @@
 
   const auth = SMR.cloud.auth;
 
-  const state = { user: null, profileEnsured: false };
+  /* Leído al cargar, antes de que el SDK procese el retorno de email. */
+  const urlParams = new URLSearchParams(global.location.search.slice(1) + '&' + global.location.hash.slice(1));
+  const linkFailed = urlParams.has('error') || urlParams.has('error_code');
+  const hadAuthCode = urlParams.has('code');
+  const LINK_ERROR = 'El enlace no es válido, ha caducado o se abrió en otro navegador. Solicita uno nuevo.';
+
+  const state = { user: null, profileEnsured: false, recovery: false };
   SMR.auth = {
     get user() { return state.user; },
     isSignedIn() { return !!state.user; },
-    async signOut() { await auth.signOut(); },
+    /* Scope 'local': revoca SOLO la sesión de este cliente (POST /logout?scope=local en
+       supabase-js v2, verificado; el default 'global' además mata las sesiones de otros
+       dispositivos y no hay requisito para ello). Con error de red el SDK limpia la sesión
+       local y emite SIGNED_OUT igualmente (v2.117.3): re-lanzar el error aquí sirve para
+       que la interfaz sepa del fallo sin fingir éxito ni duplicar la limpieza. */
+    async signOut() {
+      const res = await auth.signOut({ scope: 'local' });
+      if (res && res.error) throw res.error;
+      return res;
+    },
     open(view) { openAuthModal(view || 'login'); }
   };
 
@@ -53,7 +68,8 @@
     [/rate limit/i, 'Demasiados intentos. Espera un momento y vuelve a probarlo.'],
     [/email address .* is invalid|unable to validate email/i, 'El email no tiene un formato válido.'],
     [/signup requires a valid password/i, 'Introduce una contraseña válida.'],
-    [/fake email|test email/i, 'El proyecto no permite emails de prueba: usa un email real.']
+    [/fake email|test email/i, 'El proyecto no permite emails de prueba: usa un email real.'],
+    [/pkce code verifier not found|auth session missing/i, LINK_ERROR]
   ];
 
   function friendlyError(err) {
@@ -88,7 +104,11 @@
       const btn = li.querySelector('[data-auth-logout]');
       btn.addEventListener('click', async () => {
         btn.disabled = true;
-        try { await auth.signOut(); } catch (err) { console.warn('[SMR auth] logout:', err); btn.disabled = false; }
+        try { await SMR.auth.signOut(); }
+        catch (err) {
+          console.warn('[SMR auth] logout:', err && err.message ? err.message : err);
+          btn.disabled = false;
+        }
       });
     } else {
       li.innerHTML =
@@ -125,6 +145,7 @@
   /* ---------- Modal de autenticación ---------- */
 
   function setBusy(form, busy) {
+    form.dataset.busy = busy ? '1' : '';
     const btn = form.querySelector('button[type="submit"]');
     if (btn) {
       btn.disabled = busy;
@@ -220,16 +241,25 @@
           '<button type="submit" class="btn btn-primary">Guardar contraseña</button>' +
         '</form>',
       onSubmit: async (box, form, data) => {
+        if (form.dataset.done) { setBusy(form, false); showMessage(box, 'Contraseña ya actualizada. Puedes iniciar sesión con la nueva.', false); return; }
+        if (!state.recovery) { setBusy(form, false); showMessage(box, LINK_ERROR, true); return; }
+        if ((data.password || '').length < 6) { setBusy(form, false); showMessage(box, 'La contraseña es demasiado corta (mínimo 6 caracteres).', true); return; }
         const { error } = await auth.updateUser({ password: data.password });
         if (error) { showMessage(box, friendlyError(error), true); setBusy(form, false); return; }
         setBusy(form, false);
+        form.dataset.done = '1';
+        state.recovery = false;
         showMessage(box, 'Contraseña actualizada. Ya puedes seguir estudiando.', false);
       }
     }
   };
 
-  function openAuthModal(viewName) {
+  function openAuthModal(viewName, notice) {
     if (!SMR.modal || typeof SMR.modal.open !== 'function') return;
+    /* Cambiar de vista abandona el flujo de recuperación (solo update-password lo mantiene vivo:
+       la vista update-password no tiene enlaces de navegación, así que esto nunca corre mientras
+       haya una petición de update-password en curso en esta vista). */
+    if (viewName !== 'update-password' && state.recovery) state.recovery = false;
     const view = VIEWS[viewName] || VIEWS.login;
     SMR.modal.open((box) => {
       box.classList.add('auth-modal');
@@ -240,6 +270,7 @@
         '<p class="count-note auth-msg" data-auth-msg aria-live="polite"></p>';
       const body = box.querySelector('[data-auth-body]');
       body.innerHTML = view.html;
+      if (notice) showMessage(box, notice, true);
 
       body.addEventListener('click', (event) => {
         const link = event.target.closest('[data-view]');
@@ -249,6 +280,7 @@
       const form = body.querySelector('form');
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (form.dataset.busy) return; /* doble envío: ignorar */
         setBusy(form, true);
         showMessage(box, '', false);
         const data = Object.fromEntries(new FormData(form).entries());
@@ -277,7 +309,16 @@
     const user = session ? session.user : null;
     const wasSignedIn = !!state.user;
     state.user = user;
-    if (!user) state.profileEnsured = false;
+    if (!user) {
+      state.profileEnsured = false;
+      state.recovery = false;
+      /* El formulario de recuperación no sirve sin sesión: cerrarlo si estaba abierto
+         (SIGNED_OUT, también el propagado desde otra pestaña). La sesión persistente
+         del arranque nunca lo tiene abierto, así que la consulta es no-op fuera del logout. */
+      if (document.querySelector('[data-auth-form="update-password"]') && SMR.modal && typeof SMR.modal.close === 'function') {
+        SMR.modal.close();
+      }
+    }
     refreshWidget();
     if (user) {
       await ensureProfile(user);
@@ -289,15 +330,14 @@
 
   async function init() {
     try {
-      /* Restauración de sesión al arrancar (persistencia tras refresh). */
-      const { data, error } = await auth.getSession();
-      if (error) console.warn('[SMR auth] getSession:', error.message);
-      await handleSession(data && data.session ? data.session : null);
-
+      /* Suscripción ANTES de getSession(): el orden entre getSession y PASSWORD_RECOVERY no es
+         garantía contractual del SDK (depende del detalle de su inicialización). Suscribirse
+         primero evita depender de ello: la evidencia de pérdida del orden original es solo de mock. */
       auth.onAuthStateChange(async (event, session) => {
         if (event === 'PASSWORD_RECOVERY') {
+          state.recovery = true;
           await handleSession(session);
-          openAuthModal('update-password');
+          if (!document.querySelector('[data-auth-form="update-password"]')) openAuthModal('update-password');
           return;
         }
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
@@ -306,6 +346,13 @@
         }
         /* TOKEN_REFRESHED: supabase-js ya renovó el token; nada que hacer. */
       });
+
+      /* Restauración de sesión al arrancar (persistencia tras refresh). */
+      const { data, error } = await auth.getSession();
+      if (error) console.warn('[SMR auth] getSession:', error.message);
+      await handleSession(data && data.session ? data.session : null);
+      /* Enlace roto (error en URL) o código sin sesión: se explica y se ofrece pedir otro. */
+      if ((linkFailed || hadAuthCode) && !state.user) openAuthModal('reset', LINK_ERROR);
     } catch (err) {
       /* Sin red o CDN caído: modo visitante intacto. */
       console.warn('[SMR auth] init falló (¿offline?):', err);
