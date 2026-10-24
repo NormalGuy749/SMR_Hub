@@ -18,11 +18,16 @@
    daño. La reproducción con dos pestañas reales está en el informe de la fase.
 
    Fase E:
-     node tests/srs-clears-race.test.js                     → 7/7, exit 0
+     node tests/srs-clears-race.test.js                     → 9/9, exit 0
      SRS_CLEARS_SELFTEST=1 node tests/srs-clears-race.test.js → exit 1
      SMR_MODULE=<copia pre-8.5.14> node tests/srs-clears-race.test.js → exit 1
        (la copia se genera con `node` desde js/cloud-progress.js: ver el
         informe de la fase 8.5.14)
+
+   El caso 9 (8.9.1) es una CARACTERIZACIÓN de AUD-04 con dos DISPOSITIVOS
+   (dos localStorage, una sola fila en la nube): fija el comportamiento actual
+   del cliente —el pending obsoleto se reenvía— sin elegir la política. No
+   afirma que ese comportamiento sea el deseado.
    ===================================================================== */
 
 const fs = require('fs');
@@ -470,6 +475,74 @@ async function startCycleInsideAwait(tab, ms) {
     assert(enviados.indexOf('L:' + QC) === -1, 'y no re-sube la tarjeta viva: ' + JSON.stringify(enviados));
   })();
   record('tombstone de otro dispositivo sin marca previa: se recuerda como known (sin resurrección)');
+
+  /* 9. AUD-04 (CARACTERIZACIÓN, decisión de producto ABIERTA): un tombstone
+     `pending` OBSOLETO se reenvía después de que otro DISPOSITIVO haya revivido
+     la tarjeta y el servidor lo haya confirmado.
+
+     Secuencia real, con el orden controlado a mano:
+       A) A borra QA. El servidor aplica el tombstone pero la respuesta se pierde
+          (error de red) → A conserva `pending`.
+       B) B (otro dispositivo) hace pull del tombstone → `known`; el estudiante
+          re-valora → `revive` → el servidor confirma y `deleted_at` vuelve a NULL.
+       C) A sincroniza otra vez: el pull ve la fila VIVA, pero `pending` bloquea
+          la reinstalación y el push REENVÍA el tombstone. Con la política de
+          00008 (deleted_at pegajoso) eso vuelve a borrar la fila.
+
+     Lo que se comprueba aquí es el comportamiento del CLIENTE (el reenvío y la
+     no-reinstalación). La política del servidor está en 00008 y su prueba real
+     (`tests/pg-srs-delete.sh`) no se ejecuta en este entorno. Esta prueba fija
+     el comportamiento ACTUAL, no el deseado: cuando el propietario decida la
+     política, hay que actualizarla. */
+  await (async () => {
+    const busA = makeBus();                        /* dispositivo A */
+    const busB = makeBus();                        /* dispositivo B */
+    const rows = { srs_cards: [
+      { user_id: UID_A, question_key: QA, level: 1, due: 5, client_updated_at: 3, deleted_at: null }
+    ] };
+
+    /* --- A: borra y no recibe la confirmación del servidor --- */
+    seedAccount(busA, UID_A, {}, progressWith({ srs: { [QA]: { level: 1, due: 5 } } }));
+    const a = makeTab(busA, { cloudRows: rows });
+    a.auth(user(UID_A));
+    await sleep(400);
+    a.gateOn();
+    a.progress.dropSrs('t-t1', 0);
+    assert(await waitFor(() => a.held().length > 0, 8000), 'A no llegó a la RPC del tombstone');
+    rows.srs_cards[0].deleted_at = 1791900000000; /* el servidor SÍ lo aplicó */
+    a.fail(0);                                    /* ...pero la respuesta se pierde */
+    await sleep(400);
+    assert(a.marks()[QA] === 'pending', 'A conserva el pending sin confirmar: ' + JSON.stringify(a.marks()));
+    assert(a.srsLocal().indexOf(QA) === -1, 'A ya no tiene la tarjeta en local: ' + JSON.stringify(a.srsLocal()));
+
+    /* --- B: descubre el tombstone, revive y el servidor confirma --- */
+    seedAccount(busB, UID_A, {}, progressWith({}));
+    const b = makeTab(busB, { cloudRows: rows });
+    b.auth(user(UID_A));
+    await sleep(400);
+    assert(b.marks()[QA] === 'known', 'B recuerda el tombstone como known: ' + JSON.stringify(b.marks()));
+    b.progress.scheduleSrs('t-t1', 0, 2);         /* revive explícito del estudiante */
+    const revivido = () => b.rpcCalls.some((c) => c.name === 'merge_srs_cards'
+      && (c.params.p_cards || []).some((x) => x.question_key === QA && x.revived === true));
+    assert(await waitFor(revivido, 6000), 'B no subió el revive: ' + JSON.stringify(b.srsPayloads()));
+    rows.srs_cards[0].deleted_at = null;          /* el servidor confirma el revive */
+    rows.srs_cards[0].level = 2;
+    await sleep(400);
+    assert(b.marks()[QA] === undefined, 'B consume su marca revive al confirmar: ' + JSON.stringify(b.marks()));
+
+    /* --- A vuelve a sincronizar: reenvía el tombstone obsoleto --- */
+    const enviosPrevios = a.srsPayloads().filter((p) => p.indexOf('D:' + QA) !== -1).length;
+    a.gateOff();
+    a.progress.toggleCompleted('r-a-2');          /* cambio real → nuevo ciclo */
+    const reenviado = await waitFor(() =>
+      a.srsPayloads().filter((p) => p.indexOf('D:' + QA) !== -1).length > enviosPrevios, 6000);
+    assert(reenviado, 'A no reenvió el tombstone obsoleto: ' + JSON.stringify(a.srsPayloads()));
+    assert(a.srsLocal().indexOf(QA) === -1,
+      'A no reinstala la fila viva (el pending la bloquea): ' + JSON.stringify(a.srsLocal()));
+    assert(a.marks()[QA] === 'pending' || a.marks()[QA] === 'known',
+      'la marca no se consume sola: ' + JSON.stringify(a.marks()));
+  })();
+  record('AUD-04 (caracterización): un pending obsoleto reenvía el borrado tras un revive confirmado en otro dispositivo');
 
   /* --- auto-verificación del runner --------------------------------- */
   if (process.env.SRS_CLEARS_SELFTEST === '1') {

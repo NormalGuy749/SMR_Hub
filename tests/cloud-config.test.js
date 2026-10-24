@@ -16,6 +16,13 @@
    la Function de functions/js/cloud-config.public.js vive en /js/cloud-config.public
    y una petición a /js/cloud-config.public.js NO la ejecutaría.
 
+   AUD-01 (8.9.1): desde b5895c0 index.html no lleva un <script src="…"> fijo para la
+   configuración: un bloque inline elige la fuente según el hostname y la escribe con
+   document.write. Este archivo EJECUTA ese bloque en un sandbox (location y document
+   falsos) y comprueba la rama de GitHub Pages, la relativa, la selección por hostname
+   y el orden de carga; además muta el HTML en memoria para demostrar que las
+   comprobaciones fallan si se rompe cualquiera de las dos cosas.
+
    QUÉ NO ES: no hay claves reales, no se despliega y no se toca ninguno
    Supabase remoto. La comprobación en producción está FUERA de alcance:
    sin inyección pública la app queda local-first también allí.
@@ -178,24 +185,73 @@ check('7: el contrato sólo admite claves públicas (nunca service_role/sb_secre
 
 /* ---------- 8. Orden de carga real (index.html) ---------- */
 
+const HTML_INDEX = fs.readFileSync('index.html', 'utf8');
+const GHP_HOST = 'normalguy749.github.io';
+const CFG_RELATIVA = 'js/cloud-config.public';
+const CFG_GHP_ABSOLUTA = 'https://smr-hub.pages.dev/js/cloud-config.public';
+
 /* Los `src` de los <script> de index.html, en orden de aparición. */
-function scriptSrcs() {
-  const html = fs.readFileSync('index.html', 'utf8');
-  return [...html.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]);
+function scriptSrcs(html) {
+  return [...(html || HTML_INDEX).matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]);
+}
+
+/* El bloque inline que inyecta la configuración. No basta con BUSCAR la cadena
+   `cloud-config.public` en el HTML: hay que ejecutar la selección de rama. */
+function inlineBootstrap(html) {
+  const bloques = [...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/g)];
+  const conWrite = bloques.filter((m) => /document\.write/.test(m[2]));
+  assert(conWrite.length === 1,
+    'index.html debe tener UN bloque inline que escriba la configuración (hay ' + conWrite.length + ')');
+  assert(!/\b(defer|async)\b/.test(conWrite[0][1]),
+    'el bloque que inyecta la configuración no puede ser defer/async: debe ejecutarse al parsear, antes de los defer');
+  return conWrite[0][2];
+}
+
+/* Ejecuta ese bloque con un `location` y un `document` falsos y devuelve el src
+   que pediría en ese origen. */
+function configSrcFor(html, host) {
+  const escrito = [];
+  const g = { location: { hostname: host }, document: { write: (s) => escrito.push(String(s)) } };
+  new Function('window', 'document', inlineBootstrap(html))(g, g.document);
+  assert(escrito.length === 1,
+    'el bloque debe escribir exactamente un <script> para ' + JSON.stringify(host) + ' (escribió ' + escrito.length + ')');
+  const m = /^<script src="([^"]+)"><\/script>$/.exec(escrito[0].trim());
+  assert(m, 'la escritura no es una etiqueta <script src=…>: ' + escrito[0]);
+  return m[1];
+}
+
+/* Posiciones del arranque de Supabase: el bloque inline (que corre al parsear)
+   tiene que ir ANTES de la CDN y de los defer que consumen la configuración. */
+function bootPositions(html) {
+  const boot = inlineBootstrap(html);
+  return {
+    bootstrap: html.indexOf(boot),
+    cdn: html.indexOf('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'),
+    config: html.indexOf('js/cloud-config.js'),
+    client: html.indexOf('js/supabase.js'),
+    auth: html.indexOf('js/auth.js'),
+    profile: html.indexOf('js/cloud-profile.js'),
+    progress: html.indexOf('js/cloud-progress.js'),
+    feedback: html.indexOf('js/cloud-feedback.js')
+  };
+}
+
+function checkOrder(html) {
+  const p = bootPositions(html);
+  const orden = ['bootstrap', 'cdn', 'config', 'client', 'auth', 'profile', 'progress', 'feedback'];
+  orden.forEach((n) => assert(p[n] >= 0, 'falta ' + n + ' en index.html'));
+  for (let i = 1; i < orden.length; i++) {
+    assert(p[orden[i - 1]] < p[orden[i]],
+      'orden de carga incorrecto: ' + orden[i - 1] + ' debería ir antes que ' + orden[i]);
+  }
+  return true;
 }
 
 check('8: index.html carga la configuración antes del cliente y del SDK', () => {
-  const srcs = scriptSrcs();
-  const at = (re) => srcs.findIndex((s) => re.test(s));
-  const cdn = at(/supabase-js/);
-  const publica = at(/cloud-config\.public/);
-  const config = at(/\/cloud-config\.js$/);
-  const client = at(/\/supabase\.js$/);
-  const auth = at(/\/auth\.js$/);
-  assert(cdn >= 0 && publica >= 0 && config >= 0 && client >= 0 && auth >= 0,
-    'falta algún script del bloque de Supabase: ' + srcs.join(', '));
-  assert(cdn < publica && publica < config && config < client && client < auth,
-    'orden de carga incorrecto: CDN → configuración pública → cloud-config → supabase → auth');
+  /* checkOrder exige bootstrap → CDN → cloud-config → supabase → auth → …;
+     inlineBootstrap ya exige que el bloque no sea defer/async. */
+  checkOrder(HTML_INDEX);
+  assert(scriptSrcs().some((s) => /supabase-js/.test(s)), 'la CDN del SDK no está como <script src>');
 });
 
 /* ---------- 10. Ranura de despliegue (js/cloud-config.public.js) ---------- */
@@ -258,18 +314,55 @@ function pagesRoute(file) {
 }
 
 check('12: index.html pide exactamente la ruta que sirve la Pages Function', () => {
-  const pedidas = scriptSrcs().filter((s) => /cloud-config\.public/.test(s));
-  assert(pedidas.length === 1, 'la configuración pública debe pedirse una sola vez: ' + pedidas.join(', '));
-  const pedida = pedidas[0];
   const esperada = pagesRoute('functions/js/cloud-config.public.js');
-  assert(!/\.js$/.test(pedida),
-    'la ruta pedida (' + pedida + ') termina en .js: Pages le quita la última extensión al archivo de la Function, así que esa petición no la ejecutaría');
-  assert('/' + pedida.replace(/^\.?\//, '') === esperada,
-    'index.html pide ' + pedida + ' pero la Function de functions/js/cloud-config.public.js se sirve en ' + esperada);
-  /* Sin asset estático en esa ruta, la Function no puede quedar tapada por un
-     archivo inerte: la respuesta la decide siempre la Function. */
-  assert(!fs.existsSync(pedida.replace(/^\.?\//, '')),
-    'hay un archivo estático en la ruta de la Function (' + pedida + '): el despliegue podría servir ese archivo en vez de la configuración');
+  /* La rama relativa es la de Cloudflare Pages (y cualquier otro origen). */
+  ['smr-hub.pages.dev', 'localhost', '127.0.0.1', ''].forEach((host) => {
+    const pedida = configSrcFor(HTML_INDEX, host);
+    assert(pedida === CFG_RELATIVA, 'en ' + (host || 'file://') + ' se pide ' + pedida + ' en vez de ' + CFG_RELATIVA);
+    assert(!/\.js$/.test(pedida),
+      'la ruta pedida (' + pedida + ') termina en .js: Pages le quita la última extensión al archivo de la Function, así que esa petición no la ejecutaría');
+    assert('/' + pedida.replace(/^\.?\//, '') === esperada,
+      'index.html pide ' + pedida + ' pero la Function de functions/js/cloud-config.public.js se sirve en ' + esperada);
+    /* Sin asset estático en esa ruta, la Function no puede quedar tapada por un
+       archivo inerte: la respuesta la decide siempre la Function. */
+    assert(!fs.existsSync(pedida.replace(/^\.?\//, '')),
+      'hay un archivo estático en la ruta de la Function (' + pedida + '): el despliegue podría servir ese archivo en vez de la configuración');
+  });
+});
+
+/* ---------- 13. Selección de rama por hostname (GitHub Pages) ---------- */
+
+check('13: la rama de GitHub Pages pide la configuración absoluta y las demás la relativa', () => {
+  const ghp = configSrcFor(HTML_INDEX, GHP_HOST);
+  assert(ghp === CFG_GHP_ABSOLUTA,
+    'en ' + GHP_HOST + ' se pide ' + ghp + ' en vez de ' + CFG_GHP_ABSOLUTA);
+  assert(ghp.endsWith('/' + CFG_RELATIVA),
+    'la URL absoluta de GitHub Pages (' + ghp + ') no apunta a la ruta de la Pages Function');
+  /* La comparación es EXACTA: ni un subdominio ni un host que solo la contenga
+     deben recibir la configuración de otro despliegue. */
+  ['www.' + GHP_HOST, 'x' + GHP_HOST, GHP_HOST + '.evil.test', 'smr-hub.pages.dev', 'localhost', ''].forEach((host) => {
+    assert(configSrcFor(HTML_INDEX, host) === CFG_RELATIVA,
+      'con hostname ' + JSON.stringify(host) + ' no se eligió la rama relativa');
+  });
+});
+
+/* ---------- 14. Sensibilidad: las comprobaciones anteriores no son vacuas ---------- */
+
+check('14: las comprobaciones fallan si se rompe la selección de hostname o el orden', () => {
+  /* Mutación 1: invertir la condición del hostname. */
+  const condicion = "window.location.hostname === '" + GHP_HOST + "'";
+  const rotoHost = HTML_INDEX.replace(condicion, "window.location.hostname !== '" + GHP_HOST + "'");
+  assert(rotoHost !== HTML_INDEX, 'no se pudo mutar la condición del hostname (¿cambió el código de index.html?)');
+  assert(configSrcFor(rotoHost, GHP_HOST) !== CFG_GHP_ABSOLUTA,
+    'con la condición invertida la comprobación de GitHub Pages seguiría pasando');
+
+  /* Mutación 2: mover el bloque de configuración al final del documento. */
+  const boot = inlineBootstrap(HTML_INDEX);
+  const movido = HTML_INDEX.replace(boot, '').replace('</body>', '<script>' + boot + '</script></body>');
+  assert(movido !== HTML_INDEX, 'no se pudo mover el bloque de configuración');
+  let detectado = false;
+  try { checkOrder(movido); } catch (e) { detectado = true; }
+  assert(detectado, 'con el bloque al final la comprobación de orden seguiría pasando');
 });
 
 /* ---------- 9. Local-first intacto sin cloud ---------- */
