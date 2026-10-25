@@ -1707,7 +1707,11 @@
     /* 8.6.3: estado observable — la transición está diferida por falta de
        exclusión. Una UI puede avisar de que el cambio de cuenta no se ha
        aplicado y ofrecer reintentar o recargar. */
-    transitionPending: function () { return !!runtime.transitionPending; }
+    transitionPending: function () { return !!runtime.transitionPending; },
+    /* PWA: al recuperar la red se reengancha la sincronización por el mismo
+       camino que un re-login (drena la cola y, si el usuario ya no coincide
+       con el sync inicial, lo relanza). Sin sesión no hace nada. */
+    resumeSync: function () { return initialSync(runtime.currentUser); }
   };
 
   /* ---------- intento de transición con recuperación (fase 8.6.3) ----------

@@ -513,7 +513,14 @@ SMR.progress = {
      otro propietario. Sin ese módulo, la fusión entre pestañas sigue activa. */
   otherSlot() { return SMR.store.get(PROGRESS_KEY, null); },
 
-  save() { SMR.store.writeMerged(PROGRESS_KEY, this.data, this.otherSlot()); },
+  save() {
+    SMR.store.writeMerged(PROGRESS_KEY, this.data, this.otherSlot());
+    /* PWA: sin red se deja constancia del estado para reintentarlo al volver
+       la conexión; el envío real lo hace cloud-progress. */
+    if (SMR.offlineStore && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      SMR.offlineStore.savePendingAction('progress', this.data).catch(() => {});
+    }
+  },
 
   /* --- Recursos --- */
 
@@ -3878,6 +3885,34 @@ function wireDrawer() {
   dom.scrim.addEventListener('click', closeDrawer);
 }
 
+/* ---------- PWA ---------- */
+
+/* El service worker exige contexto seguro: https o loopback. En file:// la
+   app se abre sin él, igual que documenta cloud-config.js. */
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  const loopback = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (location.protocol !== 'https:' && !loopback) return;
+  navigator.serviceWorker.register('/sw.js').catch(() => {
+    /* Sin SW todo sigue funcionando; solo se pierde el arranque sin red. */
+  });
+}
+
+/* Al recuperar la red, si hay acciones guardadas y hay sesión, se vacía la
+   cola y cloud-progress reengancha su sincronización: es quien hace el merge
+   y quien conoce al dueño del slot. Como visitante la cola se conserva. */
+async function flushOfflineQueue() {
+  if (!SMR.offlineStore || !SMR.auth || !SMR.auth.isSignedIn()) return;
+  try {
+    const pending = await SMR.offlineStore.getPendingActions();
+    if (!pending.length) return;
+    await SMR.offlineStore.clearPendingActions();
+    if (SMR.cloudSession && typeof SMR.cloudSession.resumeSync === 'function') SMR.cloudSession.resumeSync();
+  } catch {
+    /* Sin IndexedDB: el progreso ya está guardado en localStorage. */
+  }
+}
+
 /* ---------- Arranque ---------- */
 
 function init() {
@@ -3926,6 +3961,10 @@ function init() {
     const hint = document.getElementById('feedback-hint');
     if (hint) hint.textContent = feedbackHintText();
   });
+
+  /* PWA: carga sin red y reintento de la cola al reconectar. */
+  registerServiceWorker();
+  window.addEventListener('online', flushOfflineQueue);
 
   /* Fase 5.5: contexto académico. Solo se pide si no existe perfil válido. */
   maybeAskProfileSetup();
