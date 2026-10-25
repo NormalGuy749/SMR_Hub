@@ -2,8 +2,9 @@
 
 /* SMR Hub — herramientas
    Calculadora de subredes (con explicación paso a paso), tabla de subredes,
-   reparto VLSM, conversor numérico, conversor de unidades, generador de
-   contraseñas y tabla de puertos. Se conecta a la ruta #/herramientas desde app.js. */
+   reparto VLSM, intérprete de permisos POSIX, calculadora de RAID, conversor
+   numérico, conversor de unidades, generador de contraseñas y tabla de puertos.
+   Se conecta a la ruta /herramientas desde app.js. */
 
 window.SMR_TOOLS = (function () {
 
@@ -158,6 +159,7 @@ window.SMR_TOOLS = (function () {
         ['Último host', lastHost],
         ['Hosts útiles', hosts],
         ['Red en binario', ipToBinary(net)],
+        ['Broadcast en binario', ipToBinary(bcast)],
         ['Clase', classOf(ip)],
         ['Ámbito', isPrivateOrReserved(ip)]
       ];
@@ -402,6 +404,279 @@ enlace: 2</textarea></label>
 
     netInput.addEventListener('input', compute);
     needsInput.addEventListener('input', compute);
+    compute();
+    return section;
+  }
+
+  /* ---------- Intérprete de permisos POSIX (chmod) ----------
+     mode: entero 0-7777 (los tres dígitos de permisos + el de especiales). */
+
+  const CHMOD_ROLES = ['Propietario', 'Grupo', 'Otros'];
+  const CHMOD_SPECIALS = [
+    ['suid', 0o4000, 'SUID', 'SUID: el programa se ejecuta con los permisos de quien es propietario del archivo, no con los de quien lo lanza. Así funciona passwd para escribir en /etc/shadow; un binario SUID mal configurado es una escalada de privilegios clásica.'],
+    ['sgid', 0o2000, 'SGID', 'SGID: en un ejecutable corre con el grupo propietario; en un directorio, los archivos nuevos heredan ese grupo en vez del grupo de quien los crea.'],
+    ['sticky', 0o1000, 'Sticky bit', 'Sticky bit: en un directorio, solo el dueño de cada archivo (o root) puede borrarlo o renombrarlo, aunque todos puedan escribir. Es lo que protege /tmp.']
+  ];
+
+  function chmodFromMode(mode) {
+    const m = mode & 0o7777;
+    const triples = [(m >> 6) & 7, (m >> 3) & 7, m & 7];
+    const special = {
+      suid: (m & 0o4000) !== 0,
+      sgid: (m & 0o2000) !== 0,
+      sticky: (m & 0o1000) !== 0
+    };
+    const symbolic = '-' + triples.map((v, role) => {
+      const x = (v & 1) !== 0;
+      const lead = role === 0 ? special.suid : role === 1 ? special.sgid : special.sticky;
+      const letter = role === 2 ? (x ? 't' : 'T') : (x ? 's' : 'S');
+      const exec = lead ? letter : (x ? 'x' : '-');
+      return (v & 4 ? 'r' : '-') + (v & 2 ? 'w' : '-') + exec;
+    }).join('');
+    return {
+      mode: m,
+      octal: m.toString(8),
+      symbolic,
+      bits: triples.map((v) => v.toString(2).padStart(3, '0')).join(' '),
+      triples,
+      special
+    };
+  }
+
+  function buildChmod() {
+    const section = document.createElement('section');
+    section.className = 'tool';
+    section.id = 'tool-chmod';
+    section.innerHTML = `
+      <h3 class="tool-title">${icon('keyboard', 18)} Permisos Linux (chmod)</h3>
+      <p class="tool-desc">Marca los permisos o escribe el modo octal: verás el formato simbólico, el binario y qué implica cada permiso especial.</p>
+      <div class="field-row">
+        <label class="field">
+          <span class="field-label">Modo octal (1-4 dígitos)</span>
+          <input type="text" class="input mono" id="chm-octal" value="644" maxlength="4"
+                 inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="Modo octal">
+        </label>
+        <label class="field">
+          <span class="field-label">Equivalente simbólico</span>
+          <input type="text" class="input mono" id="chm-sym" readonly aria-label="Equivalente simbólico">
+        </label>
+      </div>
+      <p class="form-error" id="chm-error" hidden>Usa de 1 a 4 dígitos octales (0-7): por ejemplo 644, 755 o 4755.</p>
+      <div class="field-row">
+        ${CHMOD_ROLES.map((role, i) => `
+          <div class="field">
+            <span class="field-label">${role} (${'ugo'[i]})</span>
+            <div class="check-row">
+              <label class="check"><input type="checkbox" data-shift="${6 - i * 3}" data-bit="4"> r</label>
+              <label class="check"><input type="checkbox" data-shift="${6 - i * 3}" data-bit="2"> w</label>
+              <label class="check"><input type="checkbox" data-shift="${6 - i * 3}" data-bit="1"> x</label>
+            </div>
+          </div>`).join('')}
+      </div>
+      <div class="check-row">
+        ${CHMOD_SPECIALS.map(([key, value, label]) => `<label class="check"><input type="checkbox" data-special="${key}"> ${label} (${value.toString(8)})</label>`).join('')}
+      </div>
+      <div class="result-grid" id="chm-results"></div>
+      <p class="hint-inline" id="chm-specials"></p>`;
+
+    const octalInput = section.querySelector('#chm-octal');
+    const symInput = section.querySelector('#chm-sym');
+    const errorEl = section.querySelector('#chm-error');
+    const results = section.querySelector('#chm-results');
+    const specialsEl = section.querySelector('#chm-specials');
+    const groups = [...section.querySelectorAll('[data-shift]')];
+    const specialBoxes = [...section.querySelectorAll('[data-special]')];
+
+    /* Pinta el resultado y sincroniza las casillas; el input octal solo se
+       reescribe cuando el cambio viene de una casilla (si no, molesta al teclear). */
+    function paint(mode, fromOctal) {
+      const info = chmodFromMode(mode);
+      if (!fromOctal) octalInput.value = info.octal;
+      symInput.value = info.symbolic;
+      groups.forEach((box) => {
+        const role = (6 - Number(box.dataset.shift)) / 3;
+        box.checked = (info.triples[role] & Number(box.dataset.bit)) !== 0;
+      });
+      specialBoxes.forEach((box) => { box.checked = info.special[box.dataset.special]; });
+
+      const rows = [
+        ['Modo octal', info.octal, true],
+        ['Simbólico', info.symbolic, true],
+        ['Binario (r w x por rol)', info.bits],
+        ...CHMOD_ROLES.map((role, i) => [role, `${info.symbolic.slice(1 + i * 3, 4 + i * 3)} (${info.triples[i]})`])
+      ];
+      results.innerHTML = rows.map(([key, value, hl]) => `
+        <div class="kv${hl ? ' kv-hl' : ''}">
+          <span class="kv-key">${esc(key)}</span>
+          <span class="kv-value mono">${esc(value)}</span>
+        </div>`).join('');
+
+      const active = CHMOD_SPECIALS.filter(([key]) => info.special[key]);
+      specialsEl.textContent = active.length
+        ? active.map(([, , , text]) => text).join(' ')
+        : 'Sin permisos especiales: el archivo solo aplica r, w y x normales.';
+    }
+
+    function valid(mode) {
+      const ok = Number.isInteger(mode) && mode >= 0 && mode <= 0o7777;
+      errorEl.hidden = ok;
+      if (!ok) { results.innerHTML = ''; symInput.value = ''; specialsEl.textContent = ''; }
+      return ok;
+    }
+
+    function fromCheckboxes() {
+      let mode = 0;
+      groups.forEach((box) => { if (box.checked) mode |= Number(box.dataset.bit) << Number(box.dataset.shift); });
+      specialBoxes.forEach((box) => {
+        if (!box.checked) return;
+        mode |= CHMOD_SPECIALS.find(([key]) => key === box.dataset.special)[1];
+      });
+      paint(mode, false);
+    }
+
+    function fromOctal() {
+      const raw = octalInput.value.trim();
+      if (!/^[0-7]{1,4}$/.test(raw)) { valid(-1); return; }
+      const mode = parseInt(raw, 8);
+      if (!valid(mode)) return;
+      paint(mode, true);
+    }
+
+    octalInput.addEventListener('input', fromOctal);
+    octalInput.addEventListener('blur', () => { if (/^[0-7]{1,4}$/.test(octalInput.value.trim())) octalInput.value = chmodFromMode(parseInt(octalInput.value.trim(), 8)).octal; });
+    section.querySelectorAll('input[type="checkbox"]').forEach((box) => box.addEventListener('change', fromCheckboxes));
+    fromOctal();
+    return section;
+  }
+
+  /* ---------- Simulador de RAID ----------
+     Tamaños en GB. Rendimiento relativo a un solo disco, estimación de clase. */
+
+  const RAID_TYPES = {
+    '0': { name: 'RAID 0', min: 2, step: 1 },
+    '1': { name: 'RAID 1', min: 2, step: 1 },
+    '5': { name: 'RAID 5', min: 3, step: 1 },
+    '6': { name: 'RAID 6', min: 4, step: 1 },
+    '10': { name: 'RAID 10', min: 4, step: 2 }
+  };
+
+  function raidLayout(type, disks, sizeGB) {
+    const spec = RAID_TYPES[type];
+    if (!spec) return { error: 'Tipo de RAID no soportado.' };
+    if (!Number.isInteger(disks) || disks < spec.min) return { error: `${spec.name} necesita al menos ${spec.min} discos.` };
+    if (type === '10' && disks % 2) return { error: 'RAID 10 agrupa espejos de dos discos: usa un número par.' };
+    if (!(sizeGB > 0)) return { error: 'La capacidad por disco debe ser mayor que cero.' };
+
+    const total = disks * sizeGB;
+    let usable, redundancy, tolerance, read, write, note, layout;
+    if (type === '0') {
+      usable = total; redundancy = 0; tolerance = 0; read = disks; write = disks;
+      note = 'Sin redundancia: si falla un disco se pierde todo el conjunto.';
+      layout = Array(disks).fill('datos');
+    } else if (type === '1' || type === '10') {
+      const pairs = Math.floor(disks / 2);
+      usable = pairs * sizeGB;
+      redundancy = total - usable;
+      tolerance = { min: 1, max: pairs };
+      read = disks; write = pairs;
+      layout = Array.from({ length: disks }, (_, i) => (i % 2 ? 'espejo' : 'datos'));
+      note = type === '1'
+        ? 'Espejo por parejas: cada dato se guarda dos veces. Toleras 1 fallo por pareja, no 2 del mismo espejo.'
+        : 'Espejos en franjas: lee de todos los discos y escribe en cada pareja. Toleras 1 fallo por pareja.';
+    } else if (type === '5') {
+      usable = (disks - 1) * sizeGB; redundancy = sizeGB;
+      tolerance = 1; read = disks - 1; write = (disks - 1) / 4;
+      layout = [...Array(disks - 1).fill('datos'), 'paridad'];
+      note = 'Un disco de paridad distribuida: sobrevive a 1 fallo. Cada escritura cuesta 4 E/S (penalización de paridad).';
+    } else {
+      usable = (disks - 2) * sizeGB; redundancy = 2 * sizeGB;
+      tolerance = 2; read = disks - 2; write = (disks - 2) / 6;
+      layout = [...Array(disks - 2).fill('datos'), 'paridad', 'paridad'];
+      note = 'Doble paridad: sobrevive a 2 fallos simultáneos. La escritura es aún más cara que en RAID 5 (penalización 6).';
+    }
+    return { name: spec.name, total, usable, redundancy, tolerance, read, write, note, layout };
+  }
+
+  /* 1 TB = 1000 GB (unidades de fabricante, las que usan los discos). */
+  function fmtCapacity(gb) {
+    const num = (n) => n.toLocaleString('es-ES', { maximumFractionDigits: 2 });
+    return gb >= 1000 ? `${num(gb / 1000)} TB (${num(gb)} GB)` : `${num(gb)} GB`;
+  }
+
+  function buildRaid() {
+    const section = document.createElement('section');
+    section.className = 'tool';
+    section.id = 'tool-raid';
+    section.innerHTML = `
+      <h3 class="tool-title">${icon('cpu', 18)} Calculadora de RAID</h3>
+      <p class="tool-desc">Capacidad útil, espacio dedicado a redundancia, tolerancia a fallos y rendimiento relativo de cada nivel.</p>
+      <div class="field-row">
+        <label class="field"><span class="field-label">Nivel</span>
+          <select class="input" id="raid-type" aria-label="Nivel de RAID">
+            ${Object.entries(RAID_TYPES).map(([key, s]) => `<option value="${key}">${s.name}</option>`).join('')}
+          </select></label>
+        <label class="field"><span class="field-label">N.º de discos</span>
+          <input type="number" class="input mono" id="raid-disks" value="4" min="2" max="64" step="1"
+                 inputmode="numeric" aria-label="Número de discos"></label>
+        <label class="field"><span class="field-label">Capacidad por disco</span>
+          <input type="text" class="input mono" id="raid-size" value="1"
+                 inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Capacidad por disco"></label>
+        <label class="field"><span class="field-label">Unidad</span>
+          <select class="input" id="raid-unit" aria-label="Unidad de capacidad">
+            <option value="1">GB</option>
+            <option value="1000">TB</option>
+          </select></label>
+      </div>
+      <p class="form-error" id="raid-error" hidden></p>
+      <div class="check-row" id="raid-layout" aria-label="Reparto de los discos"></div>
+      <div class="result-grid" id="raid-results"></div>
+      <p class="hint-inline" id="raid-note"></p>`;
+
+    const typeSel = section.querySelector('#raid-type');
+    const disksInput = section.querySelector('#raid-disks');
+    const sizeInput = section.querySelector('#raid-size');
+    const unitSel = section.querySelector('#raid-unit');
+    const errorEl = section.querySelector('#raid-error');
+    const layoutEl = section.querySelector('#raid-layout');
+    const results = section.querySelector('#raid-results');
+    const noteEl = section.querySelector('#raid-note');
+
+    const times = (n) => `${n.toLocaleString('es-ES', { maximumFractionDigits: 2 })}×`;
+
+    function compute() {
+      const raw = sizeInput.value.trim().replace(',', '.');
+      const size = Number(raw) * Number(unitSel.value);
+      const disks = Number(disksInput.value);
+      const r = raidLayout(typeSel.value, disks, size);
+
+      errorEl.textContent = r.error || '';
+      errorEl.hidden = !r.error;
+      if (r.error) { layoutEl.innerHTML = ''; results.innerHTML = ''; noteEl.textContent = ''; return; }
+
+      layoutEl.innerHTML = r.layout.map((kind, i) =>
+        `<span class="chip${kind === 'datos' ? ' active' : ''}">D${i + 1} · ${esc(kind)}</span>`).join('');
+
+      const rows = [
+        ['Capacidad útil', fmtCapacity(r.usable), true],
+        ['Redundancia / paridad', fmtCapacity(r.redundancy)],
+        ['Capacidad bruta', fmtCapacity(r.total)],
+        ['Tolerancia a fallos', typeof r.tolerance === 'number'
+          ? (r.tolerance === 0 ? '0 (ningún fallo tolerable)' : `${r.tolerance} ${r.tolerance === 1 ? 'disco' : 'discos'}`)
+          : `1 disco (hasta ${r.tolerance.max} si no fallan del mismo espejo)`],
+        ['Lectura relativa', times(r.read)],
+        ['Escritura relativa', times(r.write)]
+      ];
+      results.innerHTML = rows.map(([key, value, hl]) => `
+        <div class="kv${hl ? ' kv-hl' : ''}">
+          <span class="kv-key">${esc(key)}</span>
+          <span class="kv-value mono">${esc(value)}</span>
+        </div>`).join('');
+      noteEl.textContent = `${r.note} Rendimiento estimado en discos equivalentes, no una medida real.`;
+    }
+
+    typeSel.addEventListener('change', compute);
+    [disksInput, sizeInput].forEach((el) => el.addEventListener('input', compute));
+    unitSel.addEventListener('change', compute);
     compute();
     return section;
   }
@@ -733,13 +1008,15 @@ enlace: 2</textarea></label>
       buildSubnet(),
       buildSubnetTable(),
       buildVlsm(),
+      buildChmod(),
+      buildRaid(),
       buildConverter(),
       buildUnits(),
       buildPassword(),
       buildPorts()
     );
 
-    /* Enlace profundo: #/herramientas?tool=subredes|tabla-subredes|vlsm|conversor|unidades|contrasenas|puertos.
+    /* Enlace profundo: /herramientas?tool=subredes|tabla-subredes|vlsm|conversor|unidades|contrasenas|puertos.
        El retardo deja que app.js termine su scrollTo(0, 0). */
     const tool = window.SMR.activeQuery && window.SMR.activeQuery.get('tool');
     if (tool) {
@@ -756,15 +1033,17 @@ enlace: 2</textarea></label>
   function searchEntries() {
     const group = 'Herramientas';
     return [
-      { title: 'Calculadora de subredes', meta: 'Herramienta', group, hash: '#/herramientas?tool=subredes', text: 'calculadora de subredes ip máscara red broadcast hosts cidr prefijo' },
-      { title: 'Tabla de subredes', meta: 'Herramienta', group, hash: '#/herramientas?tool=tabla-subredes', text: 'tabla de subredes dividir red rango vlsm máscara' },
-      { title: 'Reparto VLSM', meta: 'Herramienta', group, hash: '#/herramientas?tool=vlsm', text: 'vlsm reparto subredes tamaños distintos hosts necesito red variable' },
-      { title: 'Conversor numérico', meta: 'Herramienta', group, hash: '#/herramientas?tool=conversor', text: 'conversor numérico decimal binario hexadecimal octal' },
-      { title: 'Conversor de unidades', meta: 'Herramienta', group, hash: '#/herramientas?tool=unidades', text: 'conversor de unidades bytes kilobytes kibibytes megabytes almacenamiento' },
-      { title: 'Generador de contraseñas', meta: 'Herramienta', group, hash: '#/herramientas?tool=contrasenas', text: 'generador de contraseñas seguro aleatorio fuerte entropía' },
-      { title: 'Tabla de puertos', meta: 'Herramienta', group, hash: '#/herramientas?tool=puertos', text: 'tabla de puertos tcp udp servicios ssh http dns ftp rdp' }
+      { title: 'Calculadora de subredes', meta: 'Herramienta', group, path: '/herramientas?tool=subredes', text: 'calculadora de subredes ip máscara red broadcast hosts cidr prefijo' },
+      { title: 'Tabla de subredes', meta: 'Herramienta', group, path: '/herramientas?tool=tabla-subredes', text: 'tabla de subredes dividir red rango vlsm máscara' },
+      { title: 'Reparto VLSM', meta: 'Herramienta', group, path: '/herramientas?tool=vlsm', text: 'vlsm reparto subredes tamaños distintos hosts necesito red variable' },
+      { title: 'Permisos Linux (chmod)', meta: 'Herramienta', group, path: '/herramientas?tool=chmod', text: 'chmod permisos linux octal simbólico suid sgid sticky rwx ejecutable 755 644' },
+      { title: 'Calculadora de RAID', meta: 'Herramienta', group, path: '/herramientas?tool=raid', text: 'raid 0 1 5 6 10 discos capacidad útil paridad redundancia tolerancia fallos' },
+      { title: 'Conversor numérico', meta: 'Herramienta', group, path: '/herramientas?tool=conversor', text: 'conversor numérico decimal binario hexadecimal octal' },
+      { title: 'Conversor de unidades', meta: 'Herramienta', group, path: '/herramientas?tool=unidades', text: 'conversor de unidades bytes kilobytes kibibytes megabytes almacenamiento' },
+      { title: 'Generador de contraseñas', meta: 'Herramienta', group, path: '/herramientas?tool=contrasenas', text: 'generador de contraseñas seguro aleatorio fuerte entropía' },
+      { title: 'Tabla de puertos', meta: 'Herramienta', group, path: '/herramientas?tool=puertos', text: 'tabla de puertos tcp udp servicios ssh http dns ftp rdp' }
     ];
   }
 
-  return { render, searchEntries };
+  return { render, searchEntries, calc: { chmodFromMode, raidLayout } };
 })();
