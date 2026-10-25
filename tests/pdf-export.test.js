@@ -265,7 +265,8 @@ check('index.html carga el módulo y la hoja de impresión', () => {
 check('app.js registra la ruta exportar y la navegación', () => {
   assert(/\n  exportar: \{/.test(APP), 'falta ROUTES.exportar');
   assert(/SMR\.pdfExport\.render\(root\)/.test(APP), 'la ruta no llama al módulo');
-  assert(/items: \['estudio', 'tests', 'exportar'\]/.test(APP), 'falta en NAV_GROUPS');
+  /* Orden independiente: el grupo Estudio ha ido creciendo (dashboard). */
+  assert(/items: \[[^\]]*'exportar'/.test(APP), 'falta en NAV_GROUPS');
 });
 
 check('app.js retira el examen al cambiar de vista', () => {

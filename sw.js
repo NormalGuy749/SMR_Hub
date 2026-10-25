@@ -40,6 +40,7 @@ const PRECACHE = [
   '/js/tools.js',
   '/js/tests.js',
   '/js/pdf-export.js',
+  '/js/dashboard.js',
   '/js/profile.js',
   '/js/offline-store.js',
   '/js/app.js',

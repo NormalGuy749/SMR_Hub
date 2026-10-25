@@ -3307,6 +3307,13 @@ const ROUTES = {
     icon: 'clipboard',
     render: (root) => { if (!window.SMR_TESTS) throw new Error('SMR_TESTS no disponible'); window.SMR_TESTS.render(root); }
   },
+  dashboard: {
+    title: 'Dashboard',
+    desc: 'Tu racha, tu precisión, la maestría por módulo y el repaso inteligente.',
+    keywords: ['dashboard', 'progreso', 'racha', 'maestría', 'repaso inteligente', 'rendimiento'],
+    icon: 'chart',
+    render: (root) => { if (!window.SMR.dashboard) throw new Error('SMR.dashboard no disponible'); window.SMR.dashboard.render(root); }
+  },
   exportar: {
     title: 'Exportar examen',
     desc: 'Genera un examen de SMR en PDF con hoja de soluciones, listo para imprimir.',
@@ -3368,7 +3375,7 @@ const ROUTES = {
 /* FASE 7: navegacion agrupada por areas. Mismas rutas, mas jerarquia. */
 const NAV_GROUPS = [
   { label: 'Personal', items: ['inicio', 'mi-smr'] },
-  { label: 'Estudio', items: ['estudio', 'tests', 'exportar'] },
+  { label: 'Estudio', items: ['estudio', 'tests', 'dashboard', 'exportar'] },
   { label: 'Contenido', items: ['recursos', 'redes', 'sistemas', 'casos', 'glosario', 'mapa'] },
   { label: 'Curriculo', items: ['curriculo'] },
   { label: 'Herramientas', items: ['herramientas', 'estadisticas'] }

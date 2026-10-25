@@ -6,7 +6,7 @@
    Resultados por categoría y por tema, revisión con enlaces a recursos,
    explicación de por qué las demás opciones son incorrectas y autoevaluación
    "No lo sabía / Dudé / Lo sabía" que alimenta la repetición espaciada.
-   Se conecta a #/tests desde app.js y expone API para el Modo Estudio. */
+   Se conecta a /tests desde app.js y expone API para el Modo Estudio. */
 
 window.SMR_TESTS = (function () {
 
@@ -380,7 +380,7 @@ window.SMR_TESTS = (function () {
               <p class="section-label">${icon('target', 13)} Errores pendientes</p>
               <p class="error-review-text">Tienes ${wrong} ${wrong === 1 ? 'pregunta fallada' : 'preguntas falladas'} pendiente${wrong === 1 ? '' : 's'} de repasar.</p>
             </div>
-            <a class="btn btn-primary" href="#/tests?mode=errores">Repasar ahora</a>
+            <a class="btn btn-primary" href="/tests?mode=errores">Repasar ahora</a>
           </section>` : '<span></span>'}
           ${due ? `
           <section class="panel error-review" aria-label="Repasos programados">
@@ -388,7 +388,7 @@ window.SMR_TESTS = (function () {
               <p class="section-label">${icon('clock', 13)} Repasos SRS</p>
               <p class="error-review-text">${due} ${due === 1 ? 'pregunta vence' : 'preguntas vencen'} hoy en tu plan de repetición espaciada.</p>
             </div>
-            <a class="btn btn-primary" href="#/tests?mode=srs">Repasar vencidos</a>
+            <a class="btn btn-primary" href="/tests?mode=srs">Repasar vencidos</a>
           </section>` : '<span></span>'}
         </div>` : ''}
 
@@ -1196,6 +1196,33 @@ window.SMR_TESTS = (function () {
     });
   }
 
+  /* Arranca una sesión con un subconjunto de preguntas YA elegido (dashboard
+     de repaso inteligente). Recibe candidatos { q, origIndex, testId,
+     testTitle, category } y reutiliza el motor: corrección, autoevaluación
+     SRS, registro del resultado y revisión final son los mismos. */
+  function startSession(questions, root) {
+    const host = root || document.getElementById('content');
+    if (!host || !Array.isArray(questions) || !questions.length) return false;
+    stop();
+    session = {
+      testId: '__repaso',
+      title: 'Repaso inteligente',
+      mode: 'srs',
+      questions: shuffle(questions.slice()),
+      index: 0,
+      correct: 0,
+      answers: [],
+      cfg: { label: 'Repaso inteligente', questions: Infinity, timer: 0, shuffle: false, explain: true },
+      remaining: 0,
+      intervalId: null,
+      multi: true,
+      startedAt: Date.now(),
+      timeSpent: 0
+    };
+    renderQuestion(host);
+    return true;
+  }
+
   /* ---------- Página de tests ---------- */
 
   function render(root) {
@@ -1263,7 +1290,7 @@ window.SMR_TESTS = (function () {
       title: t.title,
       meta: `Test · ${t.questions.length} preguntas`,
       group: 'Tests',
-      hash: `#/tests?test=${t.id}`,
+      path: `/tests?test=${t.id}`,
       text: `${t.title} ${t.desc} test autoevaluación preguntas examen práctica`.toLowerCase()
     }));
   }
@@ -1349,5 +1376,5 @@ window.SMR_TESTS = (function () {
     return blocks;
   }
 
-  return { render, searchEntries, stop, studyQuestion, studyBlocks };
+  return { render, searchEntries, stop, startSession, studyQuestion, studyBlocks };
 })();
