@@ -1,6 +1,6 @@
 'use strict';
 
-/* Prueba el borrado durante #/tests?mode=srs con advanceAfterSrsDrop real
+/* Prueba el borrado durante /tests?mode=srs con advanceAfterSrsDrop real
    y una sesión simulada. Usa srs.js real, DOM/modal mínimos y progreso con
    espía; no ejecuta Supabase ni PostgreSQL. El borrado remoto se prueba
    en srs-delete (mock) y pg-srs-delete.sh (servidor local real). */

@@ -373,7 +373,7 @@ window.SMR_TESTS = (function () {
               <p class="section-label">${icon('target', 13)} Errores pendientes</p>
               <p class="error-review-text">Tienes ${wrong} ${wrong === 1 ? 'pregunta fallada' : 'preguntas falladas'} pendiente${wrong === 1 ? '' : 's'} de repasar.</p>
             </div>
-            <a class="btn btn-primary" href="/tests?mode=errores">Repasar ahora</a>
+            <a class="btn btn-primary" href="tests?mode=errores">Repasar ahora</a>
           </section>` : '<span></span>'}
           ${due ? `
           <section class="panel error-review" aria-label="Repasos programados">
@@ -381,7 +381,7 @@ window.SMR_TESTS = (function () {
               <p class="section-label">${icon('clock', 13)} Repasos SRS</p>
               <p class="error-review-text">${due} ${due === 1 ? 'pregunta vence' : 'preguntas vencen'} hoy en tu plan de repetición espaciada.</p>
             </div>
-            <a class="btn btn-primary" href="/tests?mode=srs">Repasar vencidos</a>
+            <a class="btn btn-primary" href="tests?mode=srs">Repasar vencidos</a>
           </section>` : '<span></span>'}
         </div>` : ''}
 

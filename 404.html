@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <base>
+  <script>
+    if (location.protocol !== 'file:') {
+      const mirror = location.hostname === 'normalguy749.github.io';
+      const local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      document.querySelector('base').href = mirror || (local && /^\/SMR_Hub(?:\/|$)/.test(location.pathname))
+        ? '/SMR_Hub/' : '/';
+    }
+    // Espera a fijar la base antes de permitir la precarga del módulo.
+    document.write('<script src="js/routing.js"><\/script>');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Redirigiendo… · SMR Hub</title>
+  <link rel="icon" type="image/png" href="assets/brand/SMR.png">
+  <script>
+    SMR.routing.redirectFrom404();
+  </script>
+</head>
+
+<body>
+  <p>Esta página no existe. <a href="./">Volver al inicio</a>.</p>
+</body>
+
+</html>

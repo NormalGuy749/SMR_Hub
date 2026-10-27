@@ -1024,8 +1024,8 @@ function renderHome(root) {
         <h2>SMR Hub</h2>
         <p>Recursos, tests y herramientas para Sistemas Microinformáticos y Redes. Todo se guarda en tu navegador: no necesitas cuenta.</p>
         <div class="hero-actions">
-          <a class="btn btn-primary" href="/estudio">${SMR.icon('brain', 15)} Modo estudio</a>
-          <a class="btn" href="/recursos">${SMR.icon('book', 15)} Explorar recursos</a>
+          <a class="btn btn-primary" href="estudio">${SMR.icon('brain', 15)} Modo estudio</a>
+          <a class="btn" href="recursos">${SMR.icon('book', 15)} Explorar recursos</a>
           <button type="button" class="btn" data-palette>${SMR.icon('search', 15)} Buscar <kbd class="kbd">Ctrl K</kbd></button>
         </div>
       </div>
@@ -1042,7 +1042,7 @@ function renderHome(root) {
       </div>
       ${next.kind === 'recurso'
         ? `<button type="button" class="btn btn-primary" data-open-res="${next.item.id}">Continuar</button>`
-        : `<a class="btn btn-primary" href="/tests?test=${next.item.testId}">Repetir test</a>`}
+        : `<a class="btn btn-primary" href="tests?test=${next.item.testId}">Repetir test</a>`}
     </section>` : `
     <section class="panel continue-panel" aria-label="Primeros pasos">
       <div class="continue-main">
@@ -1050,7 +1050,7 @@ function renderHome(root) {
         <h3 class="continue-title">Empieza con una sesión de estudio guiada</h3>
         <p class="continue-meta">10 minutos bastan: el Modo Estudio mezcla lecciones cortas, recursos y preguntas.</p>
       </div>
-      <a class="btn btn-primary" href="/estudio">Probar el modo estudio</a>
+      <a class="btn btn-primary" href="estudio">Probar el modo estudio</a>
     </section>`}
 
     <div class="home-grid">
@@ -1089,12 +1089,12 @@ function renderHome(root) {
         <h3 class="section-label" id="home-actions">Acciones rápidas</h3>
         <div class="quick-actions">
           ${QUICK_ACTIONS.map((a) => `
-            <a class="quick-action" href="${a.path}">${SMR.icon(a.icon, 18)}<span>${SMR.esc(a.label)}</span></a>`).join('')}
+            <a class="quick-action" href="${SMR.routing.publicPath(a.path)}">${SMR.icon(a.icon, 18)}<span>${SMR.esc(a.label)}</span></a>`).join('')}
         </div>
         <h3 class="section-label follow-label">Herramientas destacadas</h3>
         <ul class="link-list compact">
           ${HOME_TOOLS.slice(0, 3).map((t) => `
-            <li><a class="link-row" href="${t.path}">
+            <li><a class="link-row" href="${SMR.routing.publicPath(t.path)}">
               ${SMR.icon(t.icon)}
               <span class="link-row-text">
                 <span class="link-row-title">${SMR.esc(t.title)}</span>
@@ -1119,7 +1119,7 @@ function renderHome(root) {
         </div>
         <div class="profile-card-actions">
           <button type="button" class="btn btn-sm" data-edit-profile>${SMR.profile.isConfigured() ? 'Editar' : 'Configurar'}</button>
-          <a class="btn btn-sm btn-primary" href="/mi-smr">Ver mi currículo</a>
+          <a class="btn btn-sm btn-primary" href="mi-smr">Ver mi currículo</a>
         </div>
       </div>
     </section>
@@ -1143,7 +1143,7 @@ function renderHome(root) {
         <p class="empty-title">Has completado todo el catálogo</p>
         <p class="empty-text">Repasa con un test o una sesión de estudio para mantener el ritmo.</p>
         <div class="empty-actions">
-          <a class="btn btn-primary" href="/tests">Hacer un test</a>
+          <a class="btn btn-primary" href="tests">Hacer un test</a>
         </div>
       </div>`}
     </section>
@@ -1163,7 +1163,7 @@ function renderHome(root) {
                 ${SMR.icon('chevronRight')}
               </button></li>`).join('')}
             ${favoriteTerms.map((t) => `
-              <li><a class="link-row" href="/glosario?q=${encodeURIComponent(t.term)}">
+              <li><a class="link-row" href="glosario?q=${encodeURIComponent(t.term)}">
                 ${SMR.icon('bookOpen')}
                 <span class="link-row-text">
                   <span class="link-row-title">${SMR.esc(t.term)}</span>
@@ -1316,7 +1316,7 @@ function openResource(id) {
         <div class="empty empty-inline">
           <p class="empty-title">No encontramos este recurso</p>
           <p class="empty-text">Puede que el enlace esté desactualizado. Explora el catálogo completo.</p>
-          <a class="btn btn-primary" href="/recursos">Ir a recursos</a>
+          <a class="btn btn-primary" href="recursos">Ir a recursos</a>
         </div>`;
       box.querySelector('.modal-close').addEventListener('click', SMR.modal.close);
     });
@@ -2289,7 +2289,7 @@ function renderMiSMR(root) {
         </div>
         <div class="profile-card-actions">
           <button type="button" class="btn" data-edit-profile>Editar perfil académico</button>
-          <a class="btn btn-primary" href="/curriculo">Ver currículo</a>
+          <a class="btn btn-primary" href="curriculo">Ver currículo</a>
         </div>
       </div>
       ${status && curriculum && curriculum.status === 'PARTIALLY_VERIFIED' ? `<div class="notice curr-alert curr-alert--warn"><strong>Verificación parcial.</strong> Se muestran solo los datos comprobados; las limitaciones están en la ficha del currículo.</div>` : ''}
@@ -2641,7 +2641,7 @@ function renderStudySetup(root) {
           <p class="section-label">${SMR.icon('target', 13)} Tienes ${wrong} ${wrong === 1 ? 'pregunta fallada' : 'preguntas falladas'}</p>
           <p class="error-review-text">La sesión priorizará los temas de esas preguntas.</p>
         </div>
-        <a class="btn" href="/tests?mode=errores">Solo repaso de errores</a>
+        <a class="btn" href="tests?mode=errores">Solo repaso de errores</a>
       </section>` : ''}
 
     <div class="study-durations" role="group" aria-label="Duración de la sesión">
@@ -2862,8 +2862,8 @@ function finishStudy(root, auto) {
       <p class="empty-title">Sesión completada${auto ? ' (tiempo agotado)' : ''}</p>
       <p class="empty-text">Has repasado ${stepsDone} pasos en unos ${elapsedMin} minutos. La sesión quedó registrada en tu actividad y suma a tu racha.</p>
       <div class="empty-actions">
-        <a class="btn btn-primary" href="/estudio">Otra sesión</a>
-        <a class="btn" href="/estadisticas">Ver estadísticas</a>
+        <a class="btn btn-primary" href="estudio">Otra sesión</a>
+        <a class="btn" href="estadisticas">Ver estadísticas</a>
       </div>
     </div>`;
 }
@@ -2943,7 +2943,7 @@ function renderCasos(root) {
         ${SMR.icon('layers', 22)}
         <p class="empty-title">Todavía no hay casos disponibles</p>
         <p class="empty-text">Los casos prácticos proponen escenarios reales para decidir como profesional.</p>
-        <div class="empty-actions"><a class="btn btn-primary" href="/recursos">Estudiar recursos</a></div>
+        <div class="empty-actions"><a class="btn btn-primary" href="recursos">Estudiar recursos</a></div>
       </div>`;
     return;
   }
@@ -3083,8 +3083,8 @@ function renderEstadisticas(root) {
         <p class="empty-title">Todavía no hay datos que mostrar</p>
         <p class="empty-text">Estudia un recurso o completa un test y tus estadísticas aparecerán aquí. Todo se guarda en este navegador.</p>
         <div class="empty-actions">
-          <a class="btn btn-primary" href="/estudio">Probar el modo estudio</a>
-          <a class="btn" href="/recursos">Explorar recursos</a>
+          <a class="btn btn-primary" href="estudio">Probar el modo estudio</a>
+          <a class="btn" href="recursos">Explorar recursos</a>
         </div>
       </div>`;
     return;
@@ -3178,7 +3178,7 @@ function renderEstadisticas(root) {
             ${SMR.icon('clipboard', 20)}
             <p class="empty-title">Sin tests realizados</p>
             <p class="empty-text">Completa un test para ver aquí tu historial.</p>
-            <a class="btn" href="/tests">Ir a tests</a>
+            <a class="btn" href="tests">Ir a tests</a>
           </div>`}
       </section>
 
@@ -3193,7 +3193,7 @@ function renderEstadisticas(root) {
               </li>`).join('')}
           </ul>
           <div class="quiz-actions">
-            <a class="btn btn-primary" href="/tests?mode=errores">Repasar errores</a>
+            <a class="btn btn-primary" href="tests?mode=errores">Repasar errores</a>
           </div>` : `
           <div class="empty empty-inline">
             ${SMR.icon('circleCheck', 20)}
@@ -3210,8 +3210,7 @@ function renderEstadisticas(root) {
    que sirva la petición (preview de Pages, 127.0.0.1, dominio espejo). */
 const SITE_ORIGIN = 'https://smr-hub.pages.dev';
 
-/* Una ruta = una URL limpia: la portada es '/', el resto '/<id>'. */
-const pathFor = (id) => (id === 'inicio' ? '/' : '/' + id);
+const pathFor = (id) => SMR.routing.publicPath(id === 'inicio' ? '/' : '/' + id);
 
 /* Título de pestaña y de resultado de búsqueda: la portada usa un título
    descriptivo; el resto, «Vista · SMR Hub». */
@@ -3421,13 +3420,7 @@ function currentPath() {
 }
 
 function parsePath(urlPath) {
-  const raw = urlPath || '/';
-  const cut = raw.indexOf('?');
-  const path = (cut === -1 ? raw : raw.slice(0, cut)).replace(/\/+$/, '');
-  return {
-    id: (path.split('/').filter(Boolean)[0] || 'inicio').toLowerCase(),
-    query: new URLSearchParams(cut === -1 ? '' : raw.slice(cut + 1))
-  };
+  return SMR.routing.parsePath(urlPath);
 }
 
 function currentRouteId() {
@@ -3437,7 +3430,7 @@ function currentRouteId() {
 
 function updateMetadata(route, id) {
   const title = titleFor(route);
-  const url = SITE_ORIGIN + pathFor(id);
+  const url = SITE_ORIGIN + SMR.routing.logicalPath(pathFor(id));
   document.title = title;
   const meta = (selector, value) => {
     const el = document.querySelector(selector);
@@ -3457,25 +3450,11 @@ function updateMetadata(route, id) {
 /* Compatibilidad: enlaces antiguos (#/tests) y el /inicio heredado pasan a su
    URL limpia sin dejar una entrada de historial. */
 function canonicalizeUrl() {
-  if (location.protocol === 'file:') return;
-  if (location.hash.indexOf('#/') === 0) {
-    const legacy = location.hash.slice(1).replace(/^\/inicio(?=[?/]|$)/, '/');
-    history.replaceState({}, '', legacy);
-    return;
-  }
-  if (location.pathname === '/inicio') history.replaceState({}, '', '/' + location.search);
+  SMR.routing.canonicalizeUrl();
 }
 
-/* 404.html deja aquí la ruta pedida antes de enviar a '/'. */
 function restorePathFrom404() {
-  try {
-    const saved = sessionStorage.getItem('smrhub:path');
-    if (!saved) return;
-    sessionStorage.removeItem('smrhub:path');
-    if (location.protocol !== 'file:' && location.pathname === '/' && saved !== '/') {
-      history.replaceState({}, '', saved);
-    }
-  } catch { /* sin sessionStorage: se queda en la portada */ }
+  SMR.routing.restorePathFrom404();
 }
 
 function render() {
@@ -3516,10 +3495,11 @@ function render() {
 }
 
 SMR.navigate = (path, replace = false) => {
+  path = SMR.routing.publicPath(path);
   /* file://: sin History API se navega por hash (hashchange vuelve a pintar). */
   if (location.protocol === 'file:') { location.hash = path; return; }
   /* Misma URL: no hay popstate, así que se repinta a mano. */
-  if (path === location.pathname + location.search) { render(); return; }
+  if (path === location.pathname + location.search + location.hash) { render(); return; }
   history[replace ? 'replaceState' : 'pushState']({}, '', path);
   render();
 };
@@ -3832,8 +3812,9 @@ function wireLinks() {
     if (!href || href.charAt(0) === '#') return;
     const url = new URL(link.href, location.href);
     if (url.origin !== location.origin) return;
+    if (location.protocol !== 'file:' && !url.pathname.startsWith(SMR.routing.basePath)) return;
     event.preventDefault();
-    SMR.navigate(url.pathname + url.search);
+    SMR.navigate(url.pathname + url.search + url.hash);
   });
 }
 
@@ -3854,7 +3835,7 @@ function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   const loopback = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   if (location.protocol !== 'https:' && !loopback) return;
-  navigator.serviceWorker.register('/sw.js').catch(() => {
+  navigator.serviceWorker.register(SMR.routing.basePath + 'sw.js', { scope: SMR.routing.basePath }).catch(() => {
     /* Sin SW todo sigue funcionando; solo se pierde el arranque sin red. */
   });
 }

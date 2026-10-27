@@ -12,6 +12,15 @@ La plataforma busca ayudar a comprender los contenidos, practicar los conocimien
 - **Alternativa en GitHub Pages:** https://normalguy749.github.io/SMR_Hub/
 - **Repositorio:** https://github.com/NormalGuy749/SMR_Hub
 
+Las rutas lógicas son las mismas en ambos hostings: `/tests`, `/recursos`,
+`/herramientas`, `/glosario` y `/exportar`. En GitHub Pages se publican bajo
+`/SMR_Hub/`, por ejemplo `/SMR_Hub/tests`; Inicio es la raíz de cada aplicación.
+Cloudflare sirve `index.html` mediante `_redirects`. En GitHub Pages, `404.html`
+transporta la ruta, consulta y hash al entrypoint del proyecto y el router los
+restaura sin añadir otra entrada al historial. Canonical, sitemap y metadatos
+sociales mantienen Cloudflare como dominio principal. El manifest y el Service
+Worker usan el directorio de la aplicación para instalación y arranque offline.
+
 ## Objetivos del proyecto
 
 SMR Hub se desarrolla con las siguientes prioridades:

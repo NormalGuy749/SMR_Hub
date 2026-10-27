@@ -6,45 +6,47 @@
    Cambiar CACHE_NAME al actualizar el precache fuerza su instalación nueva
    y retira la caché anterior. tests/pwa.test.js vigila el inventario de assets. */
 
-const CACHE_NAME = 'smr-hub-v1';
+const BASE_PATH = new URL('./', self.location.href).pathname;
+const CACHE_PREFIX = 'smr-hub:' + BASE_PATH + ':';
+const CACHE_NAME = CACHE_PREFIX + 'v2';
 
-/* Rutas absolutas: el SW vive en la raíz y su ámbito es todo el sitio. */
+/* El directorio del worker es también el ámbito público de la aplicación. */
 const PRECACHE = [
-  '/',
-  '/index.html',
-  '/404.html',
-  '/manifest.json',
-  '/favicon.png',
-  '/css/style.css',
-  '/css/app.css',
-  '/css/phase7.css',
-  '/css/print.css',
-  '/js/data.js',
-  '/js/curriculum.js',
-  '/js/content.js',
-  '/js/questions.js',
-  '/js/srs.js',
-  '/js/tools.js',
-  '/js/tests.js',
-  '/js/pdf-export.js',
-  '/js/dashboard.js',
-  '/js/profile.js',
-  '/js/offline-store.js',
-  '/js/app.js',
-  '/js/cloud-config.js',
-  '/js/supabase.js',
-  '/js/auth.js',
-  '/js/cloud-profile.js',
-  '/js/cloud-progress.js',
-  '/js/cloud-feedback.js',
-  '/assets/brand/SMR.png',
-  '/assets/brand/icon-192.png'
-];
+  '',
+  'index.html',
+  'manifest.json',
+  'favicon.png',
+  'css/style.css',
+  'css/app.css',
+  'css/phase7.css',
+  'css/print.css',
+  'js/data.js',
+  'js/curriculum.js',
+  'js/content.js',
+  'js/questions.js',
+  'js/srs.js',
+  'js/tools.js',
+  'js/tests.js',
+  'js/pdf-export.js',
+  'js/dashboard.js',
+  'js/profile.js',
+  'js/offline-store.js',
+  'js/routing.js',
+  'js/app.js',
+  'js/cloud-config.js',
+  'js/supabase.js',
+  'js/auth.js',
+  'js/cloud-profile.js',
+  'js/cloud-progress.js',
+  'js/cloud-feedback.js',
+  'assets/brand/SMR.png',
+  'assets/brand/icon-192.png'
+].map((path) => BASE_PATH + path);
 
 /* La configuración pública de Supabase la sirve una Pages Function que
    inyecta las variables del despliegue: nunca se cachea, o una rotación de
    clave quedaría servida desde disco. */
-const NEVER_CACHE = ['/js/cloud-config.public'];
+const NEVER_CACHE = ['/js/cloud-config.public', BASE_PATH + 'js/cloud-config.public'];
 
 const STATIC_DESTINATIONS = ['script', 'style', 'font', 'image', 'worker', 'manifest'];
 
@@ -61,7 +63,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.filter((key) => (key.startsWith(CACHE_PREFIX) || (BASE_PATH === '/' && /^smr-hub-v\d+$/.test(key))) && key !== CACHE_NAME).map((key) => caches.delete(key))
       ))
       .then(() => self.clients.claim())
   );
@@ -99,14 +101,19 @@ async function networkFirst(request, useFallbackCache) {
 }
 
 async function navigationFallback(request) {
+  const url = new URL(request.url);
+  if (url.pathname !== BASE_PATH && url.pathname.endsWith('/')) {
+    url.pathname = url.pathname.replace(/\/+$/, '');
+    return Response.redirect(url.href, 301);
+  }
   try {
     return await fetch(request);
   } catch {
     /* Cualquier ruta limpia (/tests, /herramientas?tool=raid) se sirve con la
        shell; el router de app.js lee location.pathname y pinta esa vista. */
-    const shell = await caches.match('/index.html');
+    const shell = await caches.match(BASE_PATH + 'index.html');
     if (shell) return shell;
-    return (await caches.match('/')) || Response.error();
+    return (await caches.match(BASE_PATH)) || Response.error();
   }
 }
 
@@ -116,13 +123,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
+  if (NEVER_CACHE.some((path) => url.pathname === path || url.pathname === path + '.js')) return;
+
   if (url.origin !== self.location.origin) {
     const cacheable = STATIC_DESTINATIONS.indexOf(request.destination) !== -1;
     event.respondWith(networkFirst(request, cacheable));
     return;
   }
-
-  if (NEVER_CACHE.some((path) => url.pathname === path || url.pathname === path + '.js')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(navigationFallback(request));

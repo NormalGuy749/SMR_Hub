@@ -172,7 +172,7 @@ function scriptSrcs(html) {
    `cloud-config.public` en el HTML: hay que ejecutar la selección de rama. */
 function inlineBootstrap(html) {
   const bloques = [...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/g)];
-  const conWrite = bloques.filter((m) => /document\.write/.test(m[2]));
+  const conWrite = bloques.filter((m) => /document\.write/.test(m[2]) && /cloud-config\.public/.test(m[2]));
   assert(conWrite.length === 1,
     'index.html debe tener UN bloque inline que escriba la configuración (hay ' + conWrite.length + ')');
   assert(!/\b(defer|async)\b/.test(conWrite[0][1]),

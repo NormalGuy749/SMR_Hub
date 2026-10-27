@@ -3,13 +3,24 @@
 <html lang="es" data-theme="light" data-text-size="md" data-animations="on">
 <head>
   <meta charset="UTF-8">
+  <base>
+  <script>
+    if (location.protocol !== 'file:') {
+      const mirror = location.hostname === 'normalguy749.github.io';
+      const local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      document.querySelector('base').href = mirror || (local && /^\/SMR_Hub(?:\/|$)/.test(location.pathname))
+        ? '/SMR_Hub/' : '/';
+    }
+    // Espera a fijar la base antes de permitir la precarga del módulo.
+    document.write('<script src="js/routing.js"><\/script>');
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMR Hub">
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/brand/icon-192.png">
   <meta name="description" id="meta-desc" content="Recursos, tests y herramientas para estudiar Sistemas Microinformáticos y Redes.">
   <meta name="keywords" content="SMR Hub, Sistemas Microinformáticos y Redes, tests SMR, recursos FP">
@@ -76,7 +87,7 @@
   <div class="app">
     <aside class="sidebar" id="sidebar" aria-label="Barra lateral">
       <div class="sidebar-brand">
-        <a class="brand-link" href="/">
+        <a class="brand-link" href="./">
           <img
             class="brand-logo"
             src="assets/brand/SMR.png"
