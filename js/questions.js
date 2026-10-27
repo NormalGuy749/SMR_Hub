@@ -1,13 +1,7 @@
 'use strict';
 
-/* SMR Hub — ampliación del banco de preguntas (fase 6)
-   Añade preguntas a los tests existentes y crea los tests de Virtualización,
-   Mantenimiento y Ofimática. Cada pregunta declara difficulty
-   (Básica/Intermedia/Avanzada), topic (estadísticas por tema),
-   relatedResource (recomendación al fallar) y explain. Opcional:
-   wrongWhy = { índiceOpción: 'por qué es incorrecta' }.
-   Incluye un validador que avisa en consola si hay preguntas sin explicar,
-   sin dificultad o con respuestas fuera de rango. */
+/* Se carga después de data.js y content.js: amplía el banco compartido
+   y valida las recomendaciones contra los recursos ya publicados. */
 
 (function () {
   const D = window.SMR_DATA;
@@ -208,11 +202,8 @@
       ]
     },
 
-    /* ---- Fase 6C: los 4 bancos que vivían en EXTRA_QUESTIONS pero sin test ----
-       Se declaran aquí, vacíos, para que merge() los rellene desde EXTRA_QUESTIONS
-       conservando el orden original. NO se duplica ninguna pregunta: el banco
-       sigue siendo la única fuente. La descripción resume los topics reales del
-       banco; no inventa temario. Categorías ya existentes en SMR_DATA.categories. */
+    /* Estos tests se declaran vacíos para recibir EXTRA_QUESTIONS durante
+       merge, sin duplicar el banco ni alterar su orden. */
     {
       id: 't-redes',
       title: 'Test de Redes',
@@ -248,11 +239,8 @@
   const problems = [];
 
   function merge() {
-    /* 1) Registrar los tests declarados en NEW_TESTS ANTES de volcar los bancos.
-          Antes se hacia al reves: EXTRA_QUESTIONS se procesaba primero, sus tests
-          destino no existian todavia y sus 102 preguntas se descartaban.
-          Reordenar no altera los tests ya existentes: ninguno de ellos es destino
-          de EXTRA_QUESTIONS y sus preguntas siguen llegando por su propia via. */
+    /* Los tests destino deben existir antes de añadir sus preguntas;
+       de lo contrario se descartarían los bancos de EXTRA_QUESTIONS. */
     const knownTests = new Set(D.tests.map((t) => t.id));
     (NEW_TESTS || []).forEach((t) => {
       if (knownTests.has(t.id)) return;
@@ -260,7 +248,6 @@
       knownTests.add(t.id);
     });
 
-    /* 2) Volcar cada banco en su test, respetando el orden original del array. */
     Object.keys(EXTRA_QUESTIONS || {}).forEach((testId) => {
       const test = D.tests.find((t) => t.id === testId);
       if (!test) { problems.push('test inexistente para preguntas extra: ' + testId); return; }
@@ -272,14 +259,10 @@
       });
     });
 
-    /* 3) Normalizar relatedResource.
-          Una referencia que no resuelve se ANULA (null) en lugar de quedarse rota.
-          No se sustituye por ningun otro recurso: no existe evidencia interna que
-          permita elegir un equivalente, y un id inventado seria peor que ninguno.
-          El valor original se conserva intacto en EXTRA_QUESTIONS/NEW_TESTS para
-          que la decision sea reversible y auditable.
-          relatedResource no participa en la clave SRS (testId:qIndex), asi que
-          anularlo no altera el progreso ni el historial de repaso. */
+    /* Una recomendación sin destino se anula sin inventar un equivalente.
+       La declaración original se conserva en EXTRA_QUESTIONS/NEW_TESTS
+       para poder auditarla. relatedResource no participa en la identidad
+       estable del SRS: anularlo no cambia el progreso. */
     const resIdsAudit = new Set((D.resources || []).map((r) => r.id));
     let anuladas = 0;
     /* Se cuenta por referencia: la incidencia queda registrada en contentGaps
@@ -301,7 +284,6 @@
       console.info('[SMR questions] ' + anuladas + ' relatedResource anulado(s): el recurso de destino no existe.');
     }
 
-    /* Validación del banco completo */
     const DIFFS = ['Básica', 'Intermedia', 'Avanzada'];
     const resIds = new Set((D.resources || []).map((r) => r.id));
     const questionSeen = new Set();

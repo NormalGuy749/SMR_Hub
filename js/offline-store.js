@@ -1,18 +1,9 @@
 'use strict';
 
-/* SMR Hub — cola offline sobre IndexedDB
-   ---------------------------------------
-   QUÉ ES: guarda el último estado que no se pudo sincronizar mientras no hay
-   red, para reintentarlo al reconectar. Tres operaciones, sin dependencias.
-   La store usa `type` como clave: guardar dos veces el mismo tipo REEMPLAZA la
-   acción anterior (una instantánea de progreso nueva sustituye a la vieja),
-   así que la cola nunca crece sin límite.
-
-   QUÉ NO ES: no habla con Supabase ni decide qué se envía. El envío lo hace
-   cloud-progress (merge, propiedad del slot y reintentos); esto solo avisa de
-   que hay algo pendiente. Si IndexedDB no está disponible (modo privado de
-   algunos navegadores), todas las funciones rechazan y la app sigue igual de
-   funcional, porque el progreso ya vive en localStorage. */
+/* IndexedDB guarda una instantánea por type: una escritura nueva sustituye
+   a la anterior y evita acumular estados obsoletos. cloud-progress decide
+   el envío, el merge y el dueño; esta cola solo señala trabajo pendiente.
+   Sin IndexedDB se rechaza la operación, pero el progreso sigue en localStorage. */
 
 window.SMR = window.SMR || {};
 

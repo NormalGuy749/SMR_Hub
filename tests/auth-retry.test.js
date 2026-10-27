@@ -1,19 +1,8 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.6.3 (etapa 0): errores de autenticación en la cola
-   de progreso (js/cloud-progress.js).
-
-   - Un JWT caducado / PGRST301 NO programa reintentos (antes: cada 120 s
-     para siempre) y NO se aparta a dead-letter: la cola se conserva.
-   - Un error transitorio reintenta, pero con tope (runtime.maxRetries).
-   - Un nuevo smr:authchange con usuario reanuda la cola.
-
-   Mocks explícitos (Supabase, timers falsos). Solo lógica; no sustituye
-   a las pruebas contra Supabase real.
-
-   Ejecutar desde la raíz:   node tests/auth-retry.test.js
-   ===================================================================== */
+/* Prueba cloud-progress.js real con Supabase y timers simulados.
+   Los errores de autenticación conservan y pausan la cola hasta re-login;
+   los transitorios usan reintentos acotados. No valida un servidor real. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -69,8 +58,7 @@ function makeEnv(rpcError) {
       get length() { return ls.size; },
       key: (i) => [...ls.keys()][i] === undefined ? null : [...ls.keys()][i]
     },
-    /* 8.6.3: sin exclusión la transición NO se ejecuta (fail-closed), así que el
-       arnés aporta un lock que concede siempre. */
+    /* La transición requiere exclusión; este arnés aporta un lock que concede siempre. */
     navigator: { locks: { request: (name, cb) => Promise.resolve().then(cb) } },
     addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
     dispatchEvent(ev) { (listeners[ev.type] || []).slice().forEach((fn) => fn(ev)); return true; },
@@ -90,7 +78,6 @@ function makeEnv(rpcError) {
   store.set(QUEUE_KEY, { attempts: [attempt], sessions: [], activity: [], wrongEvents: [], streakDays: [], failed: {} });
   return {
     signIn(u) { g.dispatchEvent({ type: 'smr:authchange', detail: { user: u || user } }); },
-    /* el token ya es válido: el siguiente envío no fallará */
     setError(err) { currentError = err; },
     rpcCalls: () => rpcCalls,
     pending: (delay) => timers.filter((t) => !t.done && t.delay === delay).length,
@@ -148,10 +135,10 @@ function makeEnv(rpcError) {
     assert(callsTrasPausa >= 1, 'se intentó el envío antes del 401');
     assert(env.pending(3000) === 0, 'en pausa no hay reintentos programados');
 
-    env.setError(null);                        /* el token ya es válido */
+    env.setError(null);
     env.signIn({ id: 'uA', email: 'a@x.es' }); /* reautenticación: objeto nuevo, mismo uid */
     await flush();
-    while (await env.runNext(0));              /* drena la cola reanudada */
+    while (await env.runNext(0));
 
     assert(env.rpcCalls() > callsTrasPausa, 'la recuperación de sesión debe reanudar el envío');
     const q = env.queue();

@@ -1,32 +1,11 @@
 'use strict';
 
-/* SMR Hub — Fase 8.8: comentarios y reportes de preguntas
-   ------------------------------------------------------------------
-   Dos envíos, una sola tubería:
-     · comentario (feedback)          → qué mejorarías de SMR Hub
-     · reporte de pregunta            → aviso sobre una pregunta concreta
-
-   Se escriben SOLO por RPC (public.submit_feedback /
-   public.submit_question_report, migración 00009): las tablas ya no
-   aceptan INSERT directo del cliente. El uid lo pone el SERVIDOR con
-   auth.uid(); este módulo no envía user_id en ninguna petición, así que no
-   hay forma de atribuir un envío a otra cuenta desde el navegador.
-
-   SIN cola y SIN reintentos automáticos: un envío es un acto explícito del
-   estudiante y el mensaje que ve es el resultado real. No hay servidor o
-   no hay sesión → se dice con claridad; nunca se finge que se guardó. Nada
-   de esto toca el progreso local: los comentarios no son progreso.
-
-   PROPIEDAD (contrato 8.6.3, sin duplicar infraestructura de sesión): se
-   captura el token del dueño del slot vivo antes de enviar y se comprueba
-   ANTES y DESPUÉS de la petición; si la cuenta cambió a mitad, el envío no
-   se anuncia como éxito — el propietario válido no se puede demostrar. Sin
-   contrato (build inconsistente) se falla cerrado.
-
-   API: SMR.feedback.submitFeedback / submitQuestionReport /
-        questionKeyOf / serverReady / available / CATEGORIES / REASONS /
-        LIMITS / MESSAGES
-*/
+/* Feedback y avisos se envían solo por las RPC de 00009: el servidor
+   atribuye user_id con auth.uid(), nunca con un identificador del cliente.
+   Cada envío es explícito, sin cola ni reintentos automáticos ni cambios
+   en el progreso. Se valida el token del dueño antes y después de la petición;
+   un cambio de cuenta impide anunciar éxito para la sesión nueva.
+   Sin contrato de propiedad se falla cerrado. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
@@ -58,16 +37,14 @@
     }
   }
 
-  /* ---------- Contrato de propiedad de sesión (8.6.3) ----------
-     Publicado por cloud-progress.js. Sin contrato no se puede demostrar el
-     propietario: ninguna operación de envío se ejecuta. */
+  /* cloud-progress.js publica el contrato de propiedad. Sin él no se
+     puede demostrar el dueño y no se permite enviar. */
   function sessionContract() {
     const c = SMR.cloudSession;
     return (c && typeof c.owner === 'function' && typeof c.token === 'function'
       && typeof c.isCurrent === 'function') ? c : null;
   }
 
-  /* ¿Hay servidor configurado? (la app sin credenciales sigue siendo local) */
   function serverReady() {
     return !!(SMR.cloudAvailable && SMR.cloud && typeof SMR.cloud.rpc === 'function');
   }

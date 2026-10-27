@@ -1,23 +1,10 @@
 'use strict';
 
-/* SMR Hub — Service Worker (PWA offline-first)
-   ---------------------------------------------
-   QUÉ ES: cachea el App Shell (lo que index.html carga para arrancar) y
-   responde desde caché sin red. Estrategias:
-     - mismo origen, estáticos ......... stale-while-revalidate
-     - navegaciones ................... red primero, y si no hay red, la
-                                        shell cacheada (cualquier ruta limpia
-                                        /tests se pinta desde /index.html)
-     - otros orígenes (Supabase, CDN) .. red primero; si falla, la copia en
-                                        caché si es un estático (script,
-                                        estilo, fuente, imagen) y si no una
-                                        respuesta 504 controlada
-   QUÉ NO ES: no sincroniza datos ni escribe en Supabase. La cola offline
-   (js/offline-store.js) y la sincronización son de cloud-progress.
-
-   Subir CACHE_NAME al cambiar los archivos precacheados: el install vuelve a
-   pedirlos y el activate borra la versión anterior. tests/pwa.test.js
-   comprueba que PRECACHE coincide con lo que carga index.html. */
+/* La shell permite arrancar sin red. Los estáticos propios usan stale-while-
+   revalidate; las navegaciones y orígenes externos intentan primero la red.
+   La sincronización de datos pertenece a cloud-progress, no al worker.
+   Cambiar CACHE_NAME al actualizar el precache fuerza su instalación nueva
+   y retira la caché anterior. tests/pwa.test.js vigila el inventario de assets. */
 
 const CACHE_NAME = 'smr-hub-v1';
 
@@ -89,7 +76,6 @@ async function staleWhileRevalidate(request) {
       return response;
     })
     .catch(() => null);
-  /* Con caché responde ya y la red actualiza en segundo plano. */
   return cached || (await network) || new Response('', { status: 504, statusText: 'Offline' });
 }
 

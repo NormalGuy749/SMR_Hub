@@ -1,13 +1,8 @@
 'use strict';
 
-/* SMR Hub — Perfil académico del estudiante (fase 5.5)
-   Contexto curricular: comunidad + curso (1.º/2.º) + curso académico.
-   Guarda SOLO la selección del estudiante: nunca copia datos del currículo.
-   Es independiente de smrhub:progress (progreso, estadísticas, historial,
-   favoritos, SRS y rachas no se tocan ni se leen desde aquí).
-
-   No usa geolocalización: el estudiante elige explícitamente.
-   No depende del DOM: se carga antes que app.js y expone window.SMR.profile. */
+/* La selección académica guarda comunidad, curso y año, sin copiar el
+   currículo ni modificar smrhub:progress. La elección es explícita, sin
+   geolocalización. Se carga antes de app.js y no depende del DOM. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
@@ -93,7 +88,6 @@
     };
   }
 
-  /* ---------- API ---------- */
 
   function read() {
     return normalize(store().get(PROFILE_KEY, null));
@@ -104,7 +98,6 @@
     return Boolean(p && p.setupCompleted);
   }
 
-  /* Guarda una selección parcial. No toca ninguna otra clave de almacenamiento. */
   function save(partial) {
     const current = read() || {};
     const next = normalize(Object.assign({}, current, partial || {}));
@@ -144,10 +137,8 @@
     );
   }
 
-  /* Módulos del curso pedido dentro del currículo del estudiante.
-     Cada módulo se devuelve como copia anotada con el contexto
-     (curriculumId + community + course + academicYear) para que las fases
-     siguientes puedan usar IDs estables sin volver a mirar el código suelto. */
+  /* Cada módulo conserva el contexto curricular completo: el código
+     aislado no identifica una instancia territorial. Se devuelve una copia. */
   function getModules(course, profile) {
     const p = profile ? normalize(profile) : read();
     if (!p) return [];
@@ -190,7 +181,6 @@
 
   SMR.profile = profile;
 
-  /* Funciones centralizadas que pide la fase 5.5 */
   SMR.getStudentCurriculum = (p) => getCurriculum(p);
   SMR.getStudentModules = (course, p) => getModules(course, p);
 })(typeof window !== 'undefined' ? window : globalThis);

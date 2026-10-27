@@ -1,37 +1,16 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.6.3 (etapa 1, validación multi-pestaña)
-
-   FIDELIDAD: se cargan DOS instancias de los módulos REALES
-   (js/profile.js + js/cloud-profile.js + js/cloud-progress.js) sobre UN
-   localStorage simulado compartido, con eventos 'storage' entregados SOLO
-   a la OTRA pestaña (semántica real del navegador).
-
-   El gestor de locks es COMPARTIDO entre pestañas y fiel a la
-   especificación Web Locks (https://www.w3.org/TR/web-locks/):
-     - FIFO por nombre: "If queue is not empty and request is not the first
-       item in queue, then return false." Una petición POSTERIOR no puede
-       adelantar a una anterior.
-     - La concesión es asíncrona (tarea).
-     - Un lock concedido NO se libera al congelar la pestaña (solo al
-       terminar el callback o al descargar el documento).
-   La versión anterior de este archivo concedía los locks EN DESORDEN, cosa
-   que un gestor conforme a la especificación no puede hacer: aquel escenario
-   no era alcanzable y ha sido sustituido por estos.
-
-   LO QUE ESTAS PRUEBAS SON: mocks explícitos (Supabase y Web Locks). NO
-   validan un navegador real ni Supabase real; no hay navegador automatizado
-   disponible en este repositorio y no se ha instalado nada.
-
-   Ejecutar desde la raíz:   node tests/multi-tab-owner.test.js
-   ===================================================================== */
+/* Dos instancias de profile, cloud-profile y cloud-progress comparten
+   localStorage simulado; storage solo se entrega a la otra pestaña.
+   El gestor de locks es compartido: FIFO por nombre, concesión asíncrona
+   y retención hasta terminar el callback, incluso al congelar una pestaña.
+   Esto respeta el orden que requiere https://www.w3.org/TR/web-locks/.
+   Supabase y Web Locks son mocks: no valida navegador ni servidor reales. */
 
 const fs = require('fs');
 const srcProfile = fs.readFileSync('js/profile.js', 'utf8');
 const srcCloudProfile = fs.readFileSync('js/cloud-profile.js', 'utf8');
-/* SMR_MODULE permite ejecutar la suite contra una VARIANTE AISLADA del módulo
-   (variante baseline en /tmp) y comprobar que estas pruebas la detectan. */
+/* SMR_MODULE permite probar una variante aislada para comprobar sensibilidad. */
 const srcProgress = fs.readFileSync(process.env.SMR_MODULE || 'js/cloud-progress.js', 'utf8');
 const srcSrs = fs.readFileSync('js/srs.js', 'utf8');
 
@@ -431,15 +410,9 @@ test('B2: una transición posterior no puede adelantar a la congelada en el lock
   assert(t1.owner() === t1.marker(), 'el contrato y el marcador deben coincidir');
 });
 
-/* =================================================================
-   Caso D (8.6.3): FAIL-CLOSED cuando no se puede garantizar exclusión.
-
-   La transición archiva, restaura y modifica el slot COMPARTIDO. Sin
-   exclusión NO se ejecuta: se DIFIERE (no toca slot, marcador ni la
-   sesión en memoria), la sincronización queda bloqueada y se reintenta
-   con backoff ACOTADO. Una decisión de sesión nueva cancela el reintento
-   anterior, de modo que un trabajo antiguo no se reactiva.
-   ================================================================= */
+/* Sin exclusión garantizada ninguna transición puede archivar ni
+   restaurar el slot compartido. Los casos siguientes comprueban los motivos
+   de fallo y la recuperación sin perder ni atribuir contenido a otro dueño. */
 
 /* D1: la API no existe, la petición se rechaza o lanza. */
 for (const mode of ['none', 'reject', 'throw']) {
@@ -587,7 +560,7 @@ test('D7: re-login de la misma cuenta con la exclusión ausente: diferida, sin d
 
   t1.auth(user(UID_A));
   await flush(20);
-  t1.auth(user(UID_A));               /* re-login de la misma cuenta */
+  t1.auth(user(UID_A));
   await flush(20);
 
   assert(t1.marker() === '__guest__' && t1.snapshot('__guest__') === null,
@@ -675,8 +648,8 @@ test('compatibilidad: marcador antiguo (uid suelto) y {owner,v:1}', async () => 
 test('primitiva: sin exclusión dos pestañas derivan la MISMA secuencia', async () => {
   const ls = new Map();
   ls.set('m', JSON.stringify({ owner: 'uid-A', seq: 5 }));
-  const nextSeq = () => JSON.parse(ls.get('m')).seq + 1;   /* leer… */
-  const write = (owner, seq) => ls.set('m', JSON.stringify({ owner, seq }));  /* …y escribir */
+  const nextSeq = () => JSON.parse(ls.get('m')).seq + 1;
+  const write = (owner, seq) => ls.set('m', JSON.stringify({ owner, seq }));
 
   /* Interleaving POSIBLE entre dos pestañas: cada una lee antes de que la otra
      escriba (localStorage no tiene transacción ni compare-and-swap). */
@@ -725,10 +698,7 @@ test('persistencia: fallo al escribir el marcador (se mide el comportamiento rea
     'FALLO REAL: con el marcador sin actualizar, una pestaña obsoleta escribió el perfil de B en la fila de A');
 });
 
-/* =================================================================
-   Caso F (Etapa 3 de 8.6.3): recuperación y ausencia de bloqueos
-   permanentes en colas, esperas y estado de sincronización.
-   ================================================================= */
+/* Recuperación de colas, esperas y sincronización sin bloqueos permanentes. */
 
 /* F1: al volver la exclusión se reanuda la SINCRONIZACIÓN y ninguna
    espera registrada durante la transición diferida se queda colgada. */
@@ -768,7 +738,7 @@ test('F1: al volver la exclusión se reanuda la sincronización sin esperas colg
 test('F2: visitante/offline sin exclusión: nada se archiva y el guardado local sigue', async () => {
   const { t1 } = twoTabs({ seed: seedGuestDevice(), t1: { locks: 'none' } });
 
-  t1.auth(null);                     /* anuncio de visitante (sin sesión) */
+  t1.auth(null);
   await flush(20);
 
   assert(t1.marker() === '__guest__', 'el marcador sigue en el visitante: ' + t1.marker());
@@ -786,8 +756,8 @@ test('F2: visitante/offline sin exclusión: nada se archiva y el guardado local 
 test('F3: dos pestañas con decisiones distintas: solo la que tiene exclusión transiciona', async () => {
   const { t1, t2 } = twoTabs({ seed: seedGuestDevice(), t1: { locks: 'none' }, t2: {} });
 
-  t1.auth(user(UID_A));              /* sin exclusión */
-  t2.auth(user(UID_B));              /* con exclusión */
+  t1.auth(user(UID_A));
+  t2.auth(user(UID_B));
   await flush(30);
 
   assert(t2.marker() === UID_B, 'la pestaña CON exclusión aplica su decisión: ' + t2.marker());

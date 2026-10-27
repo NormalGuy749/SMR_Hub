@@ -1,18 +1,8 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Exportación de exámenes a PDF (js/pdf-export.js).
-
-   QUÉ ES: carga el módulo REAL en un sandbox con un documento falso y
-   comprueba el contrato de configureExam / renderExamDOM / exportToPDF,
-   más el cableado de la ruta /exportar en index.html y js/app.js y las
-   reglas de papel de css/print.css. Nada de reimplementar la lógica.
-
-   QUÉ NO ES: no abre el diálogo de impresión ni genera un PDF de verdad
-   (eso depende del navegador); aquí print() es un contador.
-
-   Ejecutar desde la raíz:  node tests/pdf-export.test.js
-   ===================================================================== */
+/* Ejecuta pdf-export.js real con documento simulado y comprueba la vista
+   de impresión, los filtros y el cableado. print() es un contador: el
+   diálogo y el aspecto del PDF requieren validación en navegador. */
 
 const fs = require('fs');
 const vm = require('vm');
@@ -305,7 +295,7 @@ check('index.html carga el módulo y la hoja de impresión', () => {
 check('app.js registra la ruta exportar y la navegación', () => {
   assert(/\n  exportar: \{/.test(APP), 'falta ROUTES.exportar');
   assert(/SMR\.pdfExport\.render\(root\)/.test(APP), 'la ruta no llama al módulo');
-  /* Orden independiente: el grupo Estudio ha ido creciendo (dashboard). */
+  /* La pertenencia al grupo no depende de la posición de sus enlaces. */
   assert(/items: \[[^\]]*'exportar'/.test(APP), 'falta en NAV_GROUPS');
 });
 

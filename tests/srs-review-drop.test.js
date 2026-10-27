@@ -1,19 +1,9 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.5.10: quitar del repaso la tarjeta que se está
-   revisando en el modo SRS (#/tests?mode=srs).
-
-   MOCKS EXPLÍCITOS: DOM mínimo (wrapper/botones), SMR.srs REAL (js/srs.js
-   por New Function), SMR.progress con espía y SMR.modal simulado. El avance
-   del repaso se prueba ejecutando `advanceAfterSrsDrop` real con un
-   `session` de repaso simulado. NINGUNA prueba de esta suite toca Supabase
-   ni una BD; el borrado autenticado real está cubierto por srs-delete /
-   pg-srs-delete / srs-sync / h1-race.
-
-   Auto-comprobación del runner:
-     SRS_REVIEW_SELFTEST=1 node tests/srs-review-drop.test.js   → exit 1
-   ===================================================================== */
+/* Prueba el borrado durante #/tests?mode=srs con advanceAfterSrsDrop real
+   y una sesión simulada. Usa srs.js real, DOM/modal mínimos y progreso con
+   espía; no ejecuta Supabase ni PostgreSQL. El borrado remoto se prueba
+   en srs-delete (mock) y pg-srs-delete.sh (servidor local real). */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -282,7 +272,6 @@ const ITEMS = [
     assert(h2.api.calls.length === 1 && h2.api.calls[0].render === 'renderQuestion' && h2.api.calls[0].index === 0 && h2.api.calls[0].total === 2, 'se repinta la pregunta en el mismo índice: ' + JSON.stringify(h2.api.calls[0]));
     assert(h2.api.notice() === 'Quitada del repaso en este dispositivo.', 'el aviso del borrado viaja a la siguiente pantalla: ' + h2.api.notice());
     assert(!s.questions.some((q, i) => i > 0 && q.testId === s.questions[i - 1].testId && q.origIndex === s.questions[i - 1].origIndex), 'sin duplicados');
-    /* el resto conserva su estado */
     assert(h2.srsLocal[keys.b].level === 3 && h2.srsLocal[keys.c].due === 300, 'las demás tarjetas conservan nivel y vencimiento');
   })();
   record('A4/A5/A6/A11: un borrado, la tarjeta sale y el avance no salta ni repite');
@@ -293,7 +282,7 @@ const ITEMS = [
     const keys = { a: h.ID('t-t1', 0), b: h.ID('t-t1', 1), c: h.ID('t-t2', 0) };
     const h2 = makeHarness({ srsLocal: { [keys.a]: { level: 1, due: 1 }, [keys.b]: { level: 1, due: 2 }, [keys.c]: { level: 1, due: 3 } } });
     const session = makeSrsSession(ITEMS);
-    session.index = 1; /* revisando la tarjeta intermedia */
+    session.index = 1;
     h2.api.setSession(session);
     const screen = makeScreen('t-t1', 1);
     h2.api.wireSrsDrop(screen.root, srsDeletedHandler(h2, screen.root));
@@ -449,7 +438,6 @@ const ITEMS = [
   })();
   record('A14: integración del repaso y UI de resultados de 8.5.9 sin regresión');
 
-  /* --- auto-verificación del runner --------------------------------- */
   if (process.env.SRS_REVIEW_SELFTEST === '1') {
     await (async () => {
       assert(1 === 2, 'auto-verificación: aserción forzada a fallar');

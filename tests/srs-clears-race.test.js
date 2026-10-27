@@ -1,34 +1,12 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.5.14: concurrencia de las MARCAS DE BORRADO PENDIENTES
-   (smrhub:progressSyncSrsClears y smrhub:progressSyncClears).
-
-   FIDELIDAD: se cargan DOS instancias REALES de js/cloud-progress.js (una por
-   pestaña) sobre UN localStorage simulado compartido y un bus de eventos
-   'storage' entregado SOLO a la otra pestaña. La RPC `merge_srs_cards` se
-   PUEDE RETENER a voluntad: así el ciclo queda DENTRO del `await` (que en la
-   realidad dura el viaje de red) y se puede interleaving desde la otra pestaña
-   de forma determinista. Nada más se sustituye: los estados, las transiciones
-   y los payloads son los del código de producción.
-
-   LIMITACIÓN DECLARADA: un solo proceso no puede reproducir el interleaving
-   FÍSICO entre dos procesos del navegador a nivel de setItem; este arnés fija
-   el ORDEN (lectura → espera → escritura de la otra pestaña) que causa el
-   daño. La reproducción con dos pestañas reales está en el informe de la fase.
-
-   Fase E:
-     node tests/srs-clears-race.test.js                     → 9/9, exit 0
-     SRS_CLEARS_SELFTEST=1 node tests/srs-clears-race.test.js → exit 1
-     SMR_MODULE=<copia pre-8.5.14> node tests/srs-clears-race.test.js → exit 1
-       (la copia se genera con `node` desde js/cloud-progress.js: ver el
-        informe de la fase 8.5.14)
-
-   El caso 9 (8.9.1) es una CARACTERIZACIÓN de AUD-04 con dos DISPOSITIVOS
-   (dos localStorage, una sola fila en la nube): fija el comportamiento actual
-   del cliente —el pending obsoleto se reenvía— sin elegir la política. No
-   afirma que ese comportamiento sea el deseado.
-   ===================================================================== */
+/* Dos instancias reales de cloud-progress comparten almacenamiento
+   simulado y storage solo llega a la otra pestaña. Retener la RPC dentro
+   del await permite intercalar una escritura de la otra instancia.
+   El arnés controla el orden, no el interleaving físico de setItem entre
+   procesos de navegador. SMR_MODULE permite probar una variante del módulo.
+   El caso AUD-04 usa dos almacenes para caracterizar el reenvío de un pending
+   obsoleto entre dispositivos: describe el comportamiento actual, no el deseado. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -85,9 +63,9 @@ function makeTab(bus, opts) {
   const o = opts || {};
   const listeners = {};
   let tab = null;
-  const rpcCalls = [];      /* log de RPC */
-  const gate = { on: false, held: [] };  /* RPC retenidas: [{name, params, resolve, reject}] */
-  const cloudRows = o.cloudRows || {};   /* filas que devuelve .from(tabla).select() */
+  const rpcCalls = [];
+  const gate = { on: false, held: [] };
+  const cloudRows = o.cloudRows || {};
 
   const store = {
     get(k, fallback = null) {
@@ -132,7 +110,7 @@ function makeTab(bus, opts) {
   const g = {
     console: { log() {}, warn() {}, error() {}, info() {} },
     localStorage: lsView,
-    /* 8.6.3: la transición exige exclusión (fail-closed); el arnés aporta un lock. */
+    /* El arnés aporta el lock requerido para transicionar slots. */
     navigator: { locks: { request: (name, cb) => Promise.resolve().then(cb) } },
     addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
     dispatchEvent(ev) { (listeners[ev.type] || []).slice().forEach((fn) => fn(ev)); return true; },
@@ -190,7 +168,6 @@ function makeTab(bus, opts) {
     marks() { return store.get(SRS_CLEARS_KEY, null); },
     resourceClears() { return store.get(CLEARS_KEY, null); },
     srsLocal() { return Object.keys((this.progress.data.tests || {}).srs || {}); },
-    /* RPC retenidas */
     gateOn() { gate.on = true; },
     gateOff() { gate.on = false; },
     held() { return gate.held; },
@@ -271,11 +248,11 @@ async function startCycleInsideAwait(tab, ms) {
     assert(t1.marks()[QA] === 'pending', 'la copia de t1 tiene la marca antes de esperar');
 
     /* la otra pestaña marca OTRA tarjeta justo durante la espera */
-    t2.progress.dropSrs('t-t1', 1);             /* QB → 'pending' */
+    t2.progress.dropSrs('t-t1', 1);
     await sleep(300);
     assert(t2.marks()[QB] === 'pending', 'la pestaña 2 dejó su marca pending');
 
-    t1.release(0);                              /* resuelve la RPC de t1 */
+    t1.release(0);
     await sleep(400);
 
     const marks = t1.marks();
@@ -332,7 +309,7 @@ async function startCycleInsideAwait(tab, ms) {
     t2.auth(user(UID_A));
     await sleep(400);
 
-    t1.progress.dropSrs('t-t1', 0);            /* QA → pending */
+    t1.progress.dropSrs('t-t1', 0);
     await sleep(150);
     const held = await waitFor(() => t1.held().length > 0, 6000) ? t1.held()[0] : null;
     if (!held) { t1.gateOn(); await startCycleInsideAwait(t1); }
@@ -395,7 +372,7 @@ async function startCycleInsideAwait(tab, ms) {
     t1.auth(user(UID_A));
     await sleep(400);
 
-    t1.progress.dropSrs('t-t1', 0);             /* QA → pending (sin tarjeta local) */
+    t1.progress.dropSrs('t-t1', 0);
     await sleep(120);
     assert(t1.marks()[QA] === 'pending', 'la marca queda pending tras el borrado: ' + JSON.stringify(t1.marks()));
     await startCycleInsideAwait(t1);            /* ciclo con la RPC retenida */
@@ -445,9 +422,9 @@ async function startCycleInsideAwait(tab, ms) {
     const t1 = makeTab(bus, {});
     t1.auth(user(UID_A));
     await sleep(400);
-    t1.progress.toggleCompleted('r-2');   /* completa */
+    t1.progress.toggleCompleted('r-2');
     t1.progress.toggleCompleted('r-2');   /* des-completa → marca de clear real */
-    await sleep(2600);                    /* ciclo completo (push de estado) */
+    await sleep(2600);
     const clears = t1.resourceClears();
     assert(clears && clears['r-1'] === 111, 'la marca no-SRS preexistente sigue intacta: ' + JSON.stringify(clears));
     assert(typeof clears['r-2'] === 'number', 'y la nueva marca está presente: ' + JSON.stringify(clears));
@@ -467,7 +444,7 @@ async function startCycleInsideAwait(tab, ms) {
     ] } });
     t1.auth(user(UID_A));
     await sleep(400);
-    t1.progress.toggleCompleted('r-tombstone');   /* cambio real → ciclo de estado */
+    t1.progress.toggleCompleted('r-tombstone');
     await sleep(2600);
     assert(t1.srsLocal().indexOf(QC) === -1, 'la copia local obsoleta se retira: ' + JSON.stringify(t1.srsLocal()));
     assert(t1.marks()[QC] === 'known', 'el dispositivo recuerda el tombstone ajeno: ' + JSON.stringify(t1.marks()));
@@ -533,7 +510,7 @@ async function startCycleInsideAwait(tab, ms) {
     /* --- A vuelve a sincronizar: reenvía el tombstone obsoleto --- */
     const enviosPrevios = a.srsPayloads().filter((p) => p.indexOf('D:' + QA) !== -1).length;
     a.gateOff();
-    a.progress.toggleCompleted('r-a-2');          /* cambio real → nuevo ciclo */
+    a.progress.toggleCompleted('r-a-2');
     const reenviado = await waitFor(() =>
       a.srsPayloads().filter((p) => p.indexOf('D:' + QA) !== -1).length > enviosPrevios, 6000);
     assert(reenviado, 'A no reenvió el tombstone obsoleto: ' + JSON.stringify(a.srsPayloads()));
@@ -544,7 +521,6 @@ async function startCycleInsideAwait(tab, ms) {
   })();
   record('AUD-04 (caracterización): un pending obsoleto reenvía el borrado tras un revive confirmado en otro dispositivo');
 
-  /* --- auto-verificación del runner --------------------------------- */
   if (process.env.SRS_CLEARS_SELFTEST === '1') {
     await (async () => { assert(1 === 2, 'auto-verificación: aserción forzada a fallar'); })();
     record('auto-verificación (no debe llegar aquí)');

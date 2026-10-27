@@ -1,28 +1,13 @@
 'use strict';
 
-/* SMR Hub — Índice curricular de módulos (fase 6D.2)
-   ------------------------------------------------------------------
-   Capa técnica de identidad e índice para SMR_DATA.curriculums.
-
-   Propiedades (diseño aprobado en 6D.1):
-   - Determinista y pura: no lee ni escribe localStorage; no toca
-     progress, SRS, perfiles ni UI.
-   - Los moduleId son identidades DERIVADAS: data.js permanece
-     intacto; ningún objeto curricular se muta.
-   Reglas de identidad:
-   - modules1 → c1 y modules2 → c2: el curso lo fija el CONTENEDOR
-     (asturias/canarias omiten el campo course por módulo).
-   - electives/project → su propio campo course; si falta o no es
-     entero, curso "cx" (no secuenciado; p. ej. 1713 repartido en
-     asturias). Evidencia 6D.1: madrid declara dos electivas CMO en
-     cursos distintos, así que el contenedor electives NO decide.
-   - Electiva code:null → ":opt-" + slug determinista del nombre,
-     contextual al currículo (dos currículos con electivas homónimas
-     NO colisionan ni se declaran equivalentes).
-   - Colisión real → sufijo determinista "-2", "-3"… según orden de
-     carga. El doble registro estructural 1713 (modules2 + project)
-     NO se corrige: ambas instancias coexisten con identidades
-     distintas; el validador lo reporta como warning, no como error. */
+/* Índice derivado y de solo lectura de SMR_DATA.curriculums.
+   modules1/modules2 fijan el curso por contenedor: Asturias y Canarias
+   omiten course. Electives/project usan su propio course o cx si no está
+   secuenciado: Madrid tiene electivas del mismo código en cursos distintos.
+   Las electivas sin código usan un slug contextual al currículo, sin
+   equivalencias implícitas entre territorios. Las colisiones se desambiguan
+   por orden de carga (-2, -3...). El duplicado modules2/project de 1713
+   se conserva como dos instancias y se avisa; no se corrigen los datos. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
@@ -30,7 +15,6 @@
 
   const INDEX_VERSION = 1;
 
-  /* Slug determinista para electivas sin código. */
   function slug(s) {
     return String(s || '')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -38,7 +22,6 @@
       .replace(/^-+|-+$/g, '');
   }
 
-  /* Curso canónico según la regla aprobada. Devuelve 1 | 2 | null. */
   function canonicalCourse(kind, m) {
     if (kind === 'modules1') return 1;
     if (kind === 'modules2') return 2;
@@ -49,7 +32,6 @@
     return cc === null ? 'cx' : 'c' + cc;
   }
 
-  /* Identidad base SIN desambiguación de colisiones. */
   function baseModuleId(curriculumId, cc, m) {
     const seg = courseSegment(cc);
     if (m.code) return curriculumId + ':' + seg + ':' + m.code;
@@ -62,11 +44,10 @@
 
   function buildIndex() {
     const modules = [];
-    /* 6D.8 (INT-02): lookups internos sobre objetos sin prototipo;
-      se congelan antes de exponerlos en el INDEX. */
+    /* Los lookups no tienen prototipo y se congelan antes de exponerlos. */
     const byId = Object.create(null);
     const byCurriculum = Object.create(null);
-    const seenBase = new Map(); /* baseId (y sufijos) -> registro */
+    const seenBase = new Map();
     const structural = [];
     const buildErrors = [];
 
@@ -109,12 +90,12 @@
           moduleId: id,
           curriculumId: c.id,
           curriculumName: c.name || null,
-          course: cc, /* 1 | 2 | null */
+          course: cc,
           courseSegment: courseSegment(cc),
           courseSource: (kind === 'modules1' || kind === 'modules2')
             ? 'container'
             : (Number.isInteger(m.course) ? 'field' : 'absent'),
-          kind, /* modules1 | modules2 | electives | project */
+          kind,
           code: m.code != null ? m.code : null,
           name: m.name != null ? m.name : null,
           hours: Number.isFinite(m.hours) ? m.hours : null,
@@ -164,7 +145,7 @@
       version: INDEX_VERSION,
       total: modules.length,
       modules: Object.freeze(modules.slice()),
-      /* 6D.8 (INT-02): lookups y buckets congelados UNA VEZ POBLADOS. */
+      /* Se congelan solo después de poblar los buckets. */
       byId: Object.freeze(byId),
       byCurriculum: (() => { Object.keys(byCurriculum).forEach((k) => { byCurriculum[k] = Object.freeze(byCurriculum[k]); }); return Object.freeze(byCurriculum); })(),
       structuralDuplicates: Object.freeze(structural),
@@ -203,26 +184,19 @@
     return null;
   }
 
-  /* 6D.8 (INT-01): array congelado vacío compartido (invariante). */
+  /* Compartido e inmutable también para búsquedas sin resultados. */
   const EMPTY_MODULES = Object.freeze([]);
 
-  /* Busca por (curriculumId, course, code). Acepta course 1|2|'x'|'cx'|null.
-     CONTRATO (6D.8, INT-01): getModule devuelve la instancia SOLO si la
-     búsqueda es ÚNICA. Si hay varias coincidencias (p. ej. aragon:c2:1713
-     y aragon:c2:1713-2, ambas code "1713" y segmento c2) devuelve null:
-     la ambigüedad NUNCA se oculta eligiendo la primera. Para enumerar
-     todas las coincidencias usa findModules(); para identificar una
-     instancia concreta usa getModuleById() (identidad exacta).
-     Las electivas code:null solo son alcanzables vía getModuleById(). */
+  /* Una búsqueda ambigua devuelve null, nunca la primera coincidencia.
+     findModules enumera las alternativas; getModuleById identifica una
+     instancia exacta y es la única vía para electivas con code:null. */
   function getModule(curriculumId, course, code) {
     const matches = findModules(curriculumId, course, code);
     return matches.length === 1 ? matches[0] : null;
   }
 
-  /* 6D.8 (INT-01): enumera TODAS las coincidencias de
-     (curriculumId, course, code), haciendo visible la ambigüedad.
-     Devuelve un array congelado (posiblemente vacío); nunca null.
-     Orden: el de declaración del currículo. */
+  /* Enumera todas las coincidencias en orden curricular, sin ocultar
+     ambigüedad. El array devuelto siempre está congelado, incluso vacío. */
   function findModules(curriculumId, course, code) {
     const c = normalizeCourse(course);
     if (!c || code == null) return EMPTY_MODULES;
@@ -233,7 +207,6 @@
     return out.length === bucket.length ? bucket : Object.freeze(out);
   }
 
-  /* Busca por moduleId completo (única vía para electivas code:null). */
   function getModuleById(moduleId) {
     return ensureIndex().byId[String(moduleId)] || null;
   }
@@ -249,10 +222,8 @@
     const warnings = [];
     const duplicates = [];
 
-    /* 1) Errores de construcción: currículos/entradas no representables. */
     ix.buildErrors.forEach((e) => errors.push(e));
 
-    /* 2) Identidad válida y unicidad. */
     const counts = new Map();
     ix.modules.forEach((e) => {
       if (!MODULE_ID_RE.test(e.moduleId)) {
@@ -267,7 +238,6 @@
       }
     });
 
-    /* 3) Código ausente, curso inesperado, electiva sin identidad, colisiones. */
     ix.modules.forEach((e) => {
       if (e.code == null && (e.kind === 'modules1' || e.kind === 'modules2')) {
         errors.push({ code: 'missing-code', moduleId: e.moduleId, detail: 'módulo de contenedor sin code' });
@@ -293,7 +263,6 @@
        datos (p. ej. 1713). Aviso, nunca corrección. */
     ix.structuralDuplicates.forEach((s) => warnings.push(s));
 
-    /* 5) Coherencia interna: todo moduleId pertenece a un currículo existente. */
     const known = new Set((Array.isArray(D.curriculums) ? D.curriculums : [])
       .map((c) => (c && c.id) || null).filter(Boolean));
     ix.modules.forEach((e) => {
@@ -319,7 +288,7 @@
   SMR.findModules = findModules;
   SMR.validateCurriculumIndex = validateCurriculumIndex;
 
-  /* Utilidades internas, solo para las pruebas de la fase (no es API pública). */
+  /* Internos para pruebas; no forman parte de la API pública. */
   SMR.__curriculumInternals = Object.freeze({
     slug: slug,
     canonicalCourse: canonicalCourse,

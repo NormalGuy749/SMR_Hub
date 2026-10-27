@@ -1,35 +1,12 @@
 'use strict';
 
-/* SMR Hub — Mapping canónico de preguntas → topics (fase 6D.4)
-   ------------------------------------------------------------------
-   Capa DERIVADA y de solo lectura: no tabla estática de 154 filas,
-   sino reconstrucción determinista en carga a partir de los datos
-   reales. Ventajas: no duplica datos, sobrevive a reordenaciones,
-   y cualquier cambio de contenido cambia el q-... id y queda
-   detectado como huérfano por el validador.
-
-   Cadena de resolución por pregunta (diseño aprobado 6D.1/6D.3):
-   1. questionId = SMR.srs.idOf(testId, posición) → identidad estable
-      q-<16hex> (6C.5). Solo se usa como IDENTIDAD: nunca como clave
-      de posición a efectos educativos.
-   2. raw = q.topic (sin tocar), categoría = la del TEST propietario.
-   3. topicId = SMR.topics.resolveTopicId(raw, categoría).
-   4. Confianza según decisiones de 6D.3:
-      - alias scoped (raw dependiente de categoría)  → medium
-      - alias con fusión documentada por contenido    → high
-        (Limpieza, Temperaturas, SMART, Almacenamiento, Recuperación,
-         Logs, Mantenimiento→refrigeración, Conceptos, renombrados)
-      - alias directo 1:1                             → high
-      - raw ambiguo sin contexto                      → review/ambiguous
-   5. relatedResource válido como EVIDENCIA AUXILIAR: nunca decide el
-      mapping; solo añade la cadena "related-resource" a evidence y
-      permite detectar discrepancias documentadas (no se repara).
-
-   Estados: active | review | ambiguous.
-   Confianza: high | medium | low | review.
-
-   NO toca: questions.js, tests.js, srs.js, curriculum.js, topics.js,
-   localStorage, progress, SRS, IDs q-… */
+/* Mapping derivado de cada pregunta al topic editorial, sin modificarla.
+   SMR.srs.idOf aporta identidad, no significado educativo: la resolución
+   usa q.topic y la categoría del test propietario. Un alias scoped recibe
+   confianza medium; uno directo o fusionado con evidencia, high. Sin contexto
+   suficiente se conserva review/ambiguous con sus candidatos.
+   relatedResource es solo evidencia auxiliar; nunca decide el mapping
+   ni se repara automáticamente una discrepancia. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
@@ -37,22 +14,20 @@
 
   const MAPPING_VERSION = 1;
 
-  /* Raws con fusión documentada en 6D.3 (cabecera de topics.js).
-     Todos convergen al mismo topic en cualquier categoría: high. */
+  /* Las fusiones justificadas en topics.js conservan confianza high. */
   const FUSIONES_DOCUMENTADAS = Object.freeze(new Set([
     'Limpieza', 'Temperaturas', 'SMART', 'Almacenamiento',
     'Recuperación', 'Logs', 'Conceptos', 'Mantenimiento',
     'Routing', 'PSU', 'Backups', 'Memoria', 'Recursos', 'Casos de uso'
   ]));
 
-  /* Raw ambiguo por excelencia (6D.3). */
   const RAWS_AMBIGUOS = Object.freeze(new Set(['Diagnóstico']));
 
   let INDEX = null;
 
   function buildMapping() {
     const entries = [];
-    /* 6D.8 (INT-02): lookup interno sin prototipo; congelado al exponer. */
+    /* Lookup sin prototipo; se congela antes de exponerlo. */
     const byQuestionId = Object.create(null);
     const problems = [];
 
@@ -95,7 +70,7 @@
 
         if (resolution.status === 'resolved') {
           if (via === 'alias-scoped') {
-            /* Raw dependiente de la categoría: medium (6D.3, Diagnóstico/Mantenimiento). */
+            /* El significado depende de la categoría: confianza medium. */
             confidence = 'medium';
             evidence.push('scoped-alias');
           } else if (FUSIONES_DOCUMENTADAS.has(raw)) {
@@ -113,7 +88,6 @@
           evidence.push('ambiguous-without-context');
           problems.push({ code: 'ambiguous-resolution', questionId, testId: test.id, position, raw, candidates: resolution.candidates });
         } else {
-          /* unknown: no inventar. */
           status = 'review';
           confidence = 'review';
           topicId = null;
@@ -183,7 +157,6 @@
     const errors = [];
     const warnings = [];
 
-    /* B/C/D/E: integridad referencial bidireccional. */
     const validTopics = new Set((SMR.topics ? SMR.topics.list : []).map((t) => t.id));
     const questions = new Set();
     (Array.isArray(D.tests) ? D.tests : []).forEach((t) => (t.questions || []).forEach((q) => {

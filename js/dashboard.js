@@ -1,30 +1,16 @@
 'use strict';
 
-/* SMR Hub — Dashboard de rendimiento y repaso inteligente
-   -------------------------------------------------------
-   QUÉ ES: tres cálculos puros sobre el progreso guardado y una vista que los
-   pinta en /dashboard:
-     - calculateModuleMastery(): % de maestría por módulo del banco.
-     - getSmartReviewQueue(limit): preguntas vencidas en el SRS o con más
-       fallos acumulados, en el orden en que conviene repasarlas.
-     - calculateHabits(): racha de días, preguntas hechas hoy y precisión.
-
-   La maestría se deriva de lo que el motor v4 guarda de verdad — nivel SRS
-   (0-5) y fallos pendientes en tests.wrong —, no de un factor de facilidad
-   que el motor no almacena. Una pregunta con fallos pendientes cuenta la
-   mitad aunque tenga nivel alto: acertarla una vez no la convierte en
-   dominada.
-
-   QUÉ NO ES: no escribe nada. Quien guarda es app.js (scheduleSrs, recordTest).
-
-   Módulos: los del banco (SMR_DATA.tests). Hoy son 7; el dashboard pinta los
-   que tienen preguntas y no inventa filas vacías para llegar a 19. */
+/* La maestría usa el nivel SRS y los fallos pendientes que guarda el motor.
+   Una pregunta con fallos cuenta la mitad incluso con nivel alto: acertar
+   una vez no implica dominarla. Los módulos son los que tienen preguntas
+   en SMR_DATA.tests; la vista no añade módulos curriculares vacíos.
+   Estos cálculos solo leen progreso; app.js conserva la responsabilidad de guardarlo. */
 
 window.SMR = window.SMR || {};
 
 window.SMR.dashboard = (function () {
   const MAX_LEVEL = 5;       /* espejo de SRS_MAX_LEVEL en app.js ([1,1,3,7,14,30]) */
-  const WRONG_PENALTY = 0.5; /* con fallos pendientes, la mitad */
+  const WRONG_PENALTY = 0.5;
   const DEFAULT_QUEUE = 20;
 
   const esc = (v) => window.SMR.esc(v);
@@ -111,7 +97,6 @@ window.SMR.dashboard = (function () {
         const misses = wrong[keyOf(test.id, i)] || 0;
         const due = card && typeof card.due === 'number' ? card.due : null;
         const overdue = due !== null && due <= now;
-        /* Ni vencida ni fallada: no toca repasarla todavía. */
         if (!overdue && !misses) return;
         queue.push({
           q,

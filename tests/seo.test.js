@@ -1,19 +1,7 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Metadatos SEO de la portada.
-
-   QUÉ ES: comprueba el contrato del <head> de index.html, que es la única
-   URL indexable del sitio (el router usa hash: #/vista no crea documentos
-   nuevos). Vigila título, descripción, canonical, Open Graph/Twitter y el
-   JSON-LD, y que no haya etiquetas duplicadas o contradictorias.
-
-   QUÉ NO ES: no consulta el despliegue, ni Google, ni el sitemap. robots.txt
-   y sitemap.xml viven en origin/main (fuera de este árbol de trabajo) y su
-   validación real se hace contra el sitio publicado.
-
-   Ejecutar desde la raíz:  node tests/seo.test.js
-   ===================================================================== */
+/* Comprueba el contrato estático del head de index.html. No valida
+   respuestas HTTP del hosting, indexación, sitemap ni despliegues remotos. */
 
 const fs = require('fs');
 

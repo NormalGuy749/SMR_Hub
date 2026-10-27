@@ -1,89 +1,18 @@
 'use strict';
 
-/* SMR Hub — Fase 8.4: Progress Sync (solo progreso definido en 8.0/8.4)
-   ------------------------------------------------------------------
-   ÚNICA capa responsable de sync de progreso. La UI sigue usando las
-   APIs locales de SMR.progress sin cambios (wrapping aditivo).
-
-   DOMINIOS sincronizados (fase 8.4; NO SRS, NO favorites, NO settings):
-     - test_attempts      (historial de intentos, append-only)
-     - test_scores        (best=MAX histórico, last=último attempt)
-     - wrong_answer_events(append-only, fuente de verdad)
-     - wrong_answers      (caché materializada, derivable)
-     - streak_days        (append-only por día)
-     - resource_state     (viewed / completed+clear / self-assessment)
-     - study_sessions     (append-only, dedup)
-     - activity_events    (append-only, dedup; límite local 40)
-     - case_solutions     (estado por caso práctico)
-   NO toca: srs_cards (8.5), favorites (8.6), settings, feedback, etc.
-
-   ── DIRECCIÓN DE FLUJO ──
-   PUSH (local → cloud):
-     - test_attempts/study_sessions/activity_events/wrong_answer_events:
-       eventos nuevos sin marcar como sincronizados → insert append-only,
-       idempotente (chunk RPC o unique constraint).
-     - test_scores / resource_state / case_solutions / streak_days /
-       wrong_answers: MERGE determinista (no LWW ciego):
-         * test_scores.best = MAX(local, cloud)
-         * test_scores.last = attempt más reciente (created_at)
-         * resource_state.completed: activo si local activo O cloud activo;
-           si cloud tiene completed_cleared_at posterior al local completed_at,
-           el clear gana (no resucitar un completed antiguo)
-         * self_assessment: último por self_assessment_at
-         * streak_days: unión por (user_id, day)
-   PULL (cloud → local):
-     - une el historial local con test_attempts del cloud (otro dispositivo)
-     - actualiza el estado local respetando completed_cleared_at y los
-       MERGE por campo (MAX de best, unión de días, etc.)
-     - IMPORTANTE (8.4.1): wrong_answer_events y la caché wrong_answers NO
-       se reimportan todavía; su reconciliación cross-device (replay de
-       eventos + event-seed de datos previos) queda para 8.7. El PUSH de
-       eventos de error sí está activo.
-
-   ── ESTRATEGIA OFFLINE ──
-   - Todo el estudio es 100% local; nada de la UI depende de red.
-   - La cola de eventos pendientes es POR PROPIETARIO (8.4.1, A1):
-       smrhub:progressSyncQueue:<uid>  → eventos creados con esa sesión
-       smrhub:progressSyncQueue:guest  → eventos creados sin sesión
-     Un evento creado con la sesión de A NUNCA se envía con la sesión de
-     B: al cambiar de cuenta queda archivado en la cola de A y se drena
-     cuando A vuelva a entrar (recuperación explícita; no se borra nada
-     automáticamente).
-   - Al iniciar sesión se ADOPTAN los eventos guest y los de la cola
-     legada (smrhub:progressSyncQueue): la actividad sin atribuir
-     pertenece a la primera cuenta que entra en el dispositivo (mismo
-     criterio "el dispositivo que inicia sesión gana" de 8.3).
-   - Al reconectar (smr:authchange con user o retry programado) se drena
-     la cola. Reintentos con backoff; errores no bloquean nada.
-   - Un evento NO se marca como enviado hasta que el cloud confirme.
-   - Errores permanentes (SQLSTATE / validación) NO se reintentan para
-     siempre: los eventos se apartan en la cola `failed` del propietario
-     (conservados, con warn diagnóstico) para recuperación manual. Un
-     dominio fallido nunca bloquea a los demás dominios.
-
-   ── IDEMPOTENCIA ──
-   - test_attempts: UNIQUE (user, test_id, mode, created_at) + on conflict do nothing
-   - study_sessions / activity_events: igual con sus constraints
-   - wrong_answer_events: RPC sync_progress_chunk (chunk id + anti-join)
-   - test_scores/resource_state/case_solutions: upsert (estado, no evento)
-   - streak_days: PK (user_id, day), insert on conflict do nothing
-
-   ── CONCURRENCIA ──
-   - Cola serializada de operaciones (syncChain): nunca dos sync a la vez.
-   - Los MERGE de estado se hacen SIEMPRE sobre lectura fresca del local
-     en el momento de la escritura (nunca sobre un snapshot stale).
-   - Pestañas concurrentes: cada pestaña solo envía SUS eventos no
-     sincronizados; el dedupe cloud evita duplicados lógicos.
-   - Refresh durante sync: los eventos no confirmados siguen en la cola
-     persistida en localStorage; el próximo arranque reintenta.
-
-   ── ERRORES ──
-   - Todo fallo cloud → warn controlado, el local NO se toca, la cola
-     conserva los eventos para reintento. Nunca bloquear el estudio.
-   - Nunca se borra progreso local por un error de red.
-
-   NO implementado aquí (8.5–8.9): srs_cards, favorites, settings,
-   feedback, reports, entitlements, analytics, pagos. */
+/* Adaptador de progreso local a cloud. Las APIs de SMR.progress siguen
+   siendo locales; este módulo añade sincronización y conserva datos sin red.
+   Los eventos append-only se confirman por RPC o constraints de unicidad.
+   El estado se combina por dominio: best=MAX, last por intento más reciente,
+   completed respeta completed_cleared_at, autoevaluación por su fecha y
+   racha por unión de días. SRS usa pull→merge→push y resolución atómica por RPC.
+   La cola persistida fija el dueño al crear cada evento: los de A nunca
+   se envían con B. Los de visitante y la cola legada se adoptan al entrar.
+   Un evento se retira solo tras confirmación remota; los fallos permanentes
+   quedan en failed para recuperación manual, los transitorios usan backoff
+   y los de autenticación esperan re-login. Un dominio no bloquea a los demás.
+   La cadena serializa operaciones y el merge lee el local fresco al escribir;
+   una respuesta de red nunca debe borrar progreso ni mezclar propietarios. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
@@ -91,64 +20,25 @@
 
   const sb = SMR.cloud;
   const QUEUE_PREFIX = 'progressSyncQueue:';
-  const LEGACY_QUEUE_KEY = 'progressSyncQueue'; /* pre-8.4.1: sin propietario */
+  const LEGACY_QUEUE_KEY = 'progressSyncQueue'; /* formato legado sin propietario */
 
-  /* 8.4.2 (M-1): aislamiento del ESTADO DERIVADO entre cuentas del
-     mismo dispositivo. Hasta ahora smrhub:progress / progressSyncClears
-     eran claves GLOBALES: al cambiar de cuenta, el historial, best/last,
-     recursos y demás estado derivado del usuario anterior seguía en
-     vivo y el pull/push del usuario nuevo lo mezclaba (y lo subía a la
-     nube del otro). Política:
-       - smrhub:progress, progressSyncClears y studentProfile pasan a
-         ser "slots" con dueño; el contenido real por dueño vive en
-         smrhub:progressByOwner:<uid> (o <'__guest__'>).
-       - Al cambiar de sesión se GUARDA el slot vivo bajo el dueño que
-         lo generaba y se CARGA el snapshot del dueño que entra (o uno
-         nuevo vacío). Nada se borra: un logout no pierde datos.
-       - Contenido global pre-8.4.2 sin dueño identificable se conserva
-         en smrhub:progressByOwner:__unknown__ y NO se adopta
-         silenciosamente (política: no atribuir sin certeza). No se
-         sincroniza; solo lo documenta y lo conserva el operador.
-       - El progreso VISITANTE sigue funcionando tal cual: se guarda
-         bajo __guest__ y se restaura al volver a modo visitante.
-       - SRS vive dentro de tests.srs (misma clave smrhub:progress),
-         así que hereda el aislamiento sin tocar IDs estables.
-       - Con Null session (visitante) no se toca el slot de la cuenta
-         previa; solo se registra para no arrastrar datos de A a B.
-
-     8.4.4–8.4.5 (H-2, MULTI-PESTAÑA): localStorage es COMPARTIDO entre
-     pestañas del mismo origen; NO existe bloqueo inter-proceso. En 8.4.5,
-     con reproducción REAL en dos pestañas de navegador, se confirmó el
-     interleaving de transiciones: transiciones simultáneas en 2 pestañas
-     dejaban slots per-owner corruptos (A/B/__guest__ apuntando al Estado
-     de B). Corrección mínima implementada en 8.4.5 (sin arquitectura
-     nueva): transiciones de slots bajo Web Lock API (navigator.locks
-     'smrhub:slot-transition'), y listener 'storage' en la clave 'progress'
-     cuando la pestaña NO participa en la transición y su estado live NO
-     debe modificarse (per-tab runtime actualizado por el dueño CORRECTO;
-     las notificaciones/storage event en navegadores la entregan solo a
-     las otras pestañas). Con locks no disponibles (navegador viejo, mocks
-     sin navigator.locks) se ejecuta la transición sin espera, que es
-     exactamente el comportamiento previo a 8.4.5; el 'storage' listener
-     re-sincroniza runtime en la pestaña pasiva.
-     NOTA (limitación de 'storage' event): el storage event solo informa a
-     LAS OTRAS pestañas, no a la que escribe; aquí todo lo que controla el
-     runtime de una transición es LOcal a la pestaña que la ejecuta (la
-     que dispara el authchange), de modo que la pestaña activa siempre
-     termina consistente; las pasivas re-sincronizan con su propio lock.
-     La exclusión de writes/colas sigue garantizada por los guardas
-     sessionHandleFor/sessionChangedFor (8.4.4 H-1) y las colas por UID. */
+  /* progress, marcas de borrado y studentProfile forman un slot con dueño.
+     Al cambiar de cuenta se archiva bajo progressByOwner:<uid> y se restaura
+     el snapshot entrante; el visitante conserva el suyo en __guest__.
+     El contenido heredado sin dueño se custodia en __unknown__, sin atribuirlo
+     ni sincronizarlo automáticamente. SRS hereda este aislamiento.
+     localStorage es compartido y no ofrece transacciones entre claves: las
+     transiciones requieren Web Locks y se difieren sin exclusión garantizada.
+     storage solo avisa a las otras pestañas; la que escribe actualiza su
+     runtime, las pasivas se reconcilian bajo el mismo lock. */
   const OWNER_KEY_PREFIX = 'progressByOwner:';
   const GUEST_OWNER = '__guest__';
   const UNKNOWN_OWNER = '__unknown__';
   /* claves del slot vivo que se intercambian junto al snapshot de progreso */
   const SLOT_KEYS = ['progress', 'progressSyncClears', 'progressSyncSrsClears', 'studentProfile'];
-  /* 8.5.11 (D-3): DUEÑO DEL SLOT VIVO, persistido. Sin esto, cada arranque
-     empezaba con runtime.currentUser = null y el primer smr:authchange no
-     sabía de quién era el slot vivo: archivaba el estado autenticado como
-     contenido de visitante (__guest__) y restauraba el snapshot obsoleto
-     del dueño, reintroduciendo marcas pending ya revividas. NO es una
-     clave de slot (es metadato de propiedad) y no entra en SLOT_KEYS. */
+  /* El dueño persistido permite reconocer el slot tras recargar sin
+     restaurar un snapshot obsoleto ni archivar la cuenta como visitante.
+     Es metadato de propiedad: queda fuera de SLOT_KEYS. */
   const LIVE_OWNER_KEY = 'liveOwner';
 
   function ownerSlotKey(owner) { return OWNER_KEY_PREFIX + owner; }
@@ -169,13 +59,10 @@
     try { SMR.store.set(LIVE_OWNER_KEY, { owner: owner, v: 1 }); } catch (err) { warn('dueño del slot vivo', err); }
   }
 
-  /* 8.5.13: QUIÉN escribió por última vez el slot vivo. El marcador de dueño
-     solo lo escriben las transiciones de sesión: una pestaña retrasada (p.
-     ej. en segundo plano) puede volcar SU contenido en el slot vivo sin
-     cambiar el dueño, y entonces el marcador ya no describe el contenido.
-     Sin esta marca, la pestaña de la cuenta fusionaría contenido del
-     visitante dentro de su propio slot (mezcla de propietarios). Metadato
-     local, aditivo, fuera de SLOT_KEYS: no se archiva ni se sincroniza. */
+  /* liveOwner cambia al transicionar, pero una pestaña retrasada puede
+     escribir después con otro dueño. liveWriter identifica ese contenido
+     para impedir fusionarlo con el de otra cuenta. Es metadato local,
+     fuera de SLOT_KEYS y de la sincronización. */
   const LIVE_WRITER_KEY = 'liveWriter';
 
   function readLiveWriter() {
@@ -196,15 +83,13 @@
     return runtime.currentUser ? (runtime.currentUser.id || 'user') : GUEST_OWNER;
   }
 
-  /* El manejador usa null para "contenido de visitante o sin dueño
-     conocido"; el marcador guarda __guest__ cuando el slot es del
-     visitante, así que se traduce a null y el camino de custodia de
-     visitante (8.4.2 M-1) queda EXACTAMENTE igual. */
+  /* El manejador representa visitante o dueño desconocido con null;
+     el marcador persistido usa __guest__ para el visitante. */
   function slotOwnerOrUnknown(marker) {
     return marker && marker !== GUEST_OWNER ? marker : null;
   }
 
-  /* 8.5.13: la fusión de escrituras entre pestañas (SMR.store.writeMerged) no
+  /* la fusión de escrituras entre pestañas (SMR.store.writeMerged) no
      debe MEZCLAR el slot vivo de dos propietarios. Si el marcador persistido
      dice que el slot vivo es de otro dueño, esta pestaña no fusiona y su
      escritura es la única verdad. Sin marcador (perfil heredado o sin store)
@@ -218,7 +103,6 @@
     return SMR.store.get('progress', null);
   };
 
-  /* Datos del slot vivo (lo que ve la app ahora mismo). */
   function captureSlot() {
     const obj = {};
     SLOT_KEYS.forEach((k) => { obj[k] = SMR.store.get(k, null); });
@@ -242,7 +126,7 @@
       if (v === null || v === undefined) SMR.store.remove(k);
       else SMR.store.set(k, v);
     });
-    /* 8.5.13: el slot acaba de ser instalado a lo bruto (snapshot de otro
+    /* el slot acaba de ser instalado a lo bruto (snapshot de otro
        dueño o slot limpio). La base de fusión de ESTA pestaña pasa a ser lo
        instalado: fusionar una escritura posterior contra la copia que se
        acaba de sustituir resucitaría contenido ajeno. */
@@ -257,7 +141,7 @@
     SLOT_KEYS.forEach((k) => { written[k] = SMR.store.get(k, null); });
   }
 
-  /* 8.4.4 (B-1): localStorage NO es atómico entre claves (cada
+  /* localStorage NO es atómico entre claves (cada
      setItem es independiente; una cuota llena puede fallar a mitad).
      Antes de un writeSlot que DEJA VACÍO el slot vivo (transición a un
      estado limpio o snapshot AJENO), se respalda primero el contenido
@@ -268,7 +152,7 @@
      puede recuperar desde el respaldo. Formato: { backup: captureSlot(), savedAt, v: 1 }. */
   function stashSlotBeforeWipe(owner) {
     const slot = captureSlot();
-    if (!hasContent(slot)) return true; /* nada que custodiar */
+    if (!hasContent(slot)) return true;
     const backupKey = ownerSlotKey(owner) + ':stash';
     const ok = SMR.store.set(backupKey, { backup: slot, savedAt: Date.now(), v: 1 });
     if (!ok) {
@@ -281,11 +165,9 @@
   }
 
   function writeSlotSafely(obj, owner) {
-    /* si el nuevo contenido es VACÍO o AJENO (distinto del vivo), custodiar antes */
     const willWipeOrReplace = !obj || !hasContent(obj) || !sameQuarantineContent(SLOT_KEYS.reduce((a, k) => { a[k] = obj[k] === undefined ? null : obj[k]; return a; }, {}), captureSlot());
     if (willWipeOrReplace) stashSlotBeforeWipe(owner || currentOwner());
     writeSlot(obj);
-    /* si el write fue completo y no vacío, retirar el stash temprano */
     if (obj && hasContent(obj)) {
       SMR.store.remove(ownerSlotKey(owner || currentOwner()) + ':stash');
     }
@@ -317,7 +199,7 @@
       void entries;
     }
     if (raw && typeof raw === 'object' && raw.slot && typeof raw.slot === 'object') {
-      /* 8.4.4 (B-1): instalar el contenido del dueño custodiando antes
+      /* instalar el contenido del dueño custodiando antes
          el slot vivo (no perderlo si la cuota interrumpe la escritura). */
       writeSlotSafely(raw.slot, owner);
       return raw.slot;
@@ -327,10 +209,10 @@
     return null;
   }
 
-  /* Contenido global pre-8.4.2 sin dueño: NO se descarta. Con contenido
+  /* Contenido heredado sin dueño: NO se descarta. Con contenido
      se guarda bajo __unknown__ y deja el slot limpio para el nuevo
      dueño. Nunca se restaura automáticamente (no atribuir sin certeza).
-     8.4.4 (H-3): la cuarentena es una LISTA: dos contenidos distintos
+     La cuarentena es una LISTA: dos contenidos distintos
      sin dueño coexisten (append), el idéntico no se duplica y, si el
      almacenamiento falla o el slot previo está corrupto, se sepulca demorada en una clave colisión-free; NADA se pierde. */
   const QUARANTINE_MAX = 20; /* límite razonable de entradas por dispositivo */
@@ -364,7 +246,7 @@
        contra la misma cuarentena a mitad de ssecciones) */
     if (list.some((e) => e && typeof e === 'object' && e.slot && sameQuarantineContent(e.slot, slot))) return;
     list.push(entry);
-    if (list.length > QUARANTINE_MAX) list = list.slice(-QUARANTINE_MAX); /* conserva la más reciente */
+    if (list.length > QUARANTINE_MAX) list = list.slice(-QUARANTINE_MAX);
     const ok = SMR.store.set(ownerSlotKey(UNKNOWN_OWNER), { quarantine: list, v: 2 });
     if (!ok) {
       /* cuota agotada: la escritura lista falla → copia colisión-free
@@ -380,16 +262,16 @@
 
   const runtime = {
     currentUser: null,
-    liveOwner: readLiveOwner(), /* 8.5.11 (D-3): dueño del slot vivo al arrancar */
+    liveOwner: readLiveOwner(), /* dueño del slot vivo al arrancar */
     syncing: false,
-    initialSyncFor: null, /* uid con sync inicial ya programado (8.4.1, A2) */
+    initialSyncFor: null, /* uid con sync inicial ya programado */
     retryTimer: null,
     retryDelay: 3000,
     maxRetryDelay: 120000,
     maxRetries: 10, /* reintentos transitorios seguidos; la cola persiste y el próximo envío la retoma */
     retryCount: 0,
     authPaused: false, /* JWT/401: la cola se conserva y se reanuda al reautenticar */
-    /* 8.6.3: transición de slots DIFERIDA por falta de exclusión. Mientras esté
+    /* transición de slots DIFERIDA por falta de exclusión. Mientras esté
        activo, NO se escribe nada: el estado en memoria es del dueño anterior. */
     transitionPending: false,
     deferredUser: null,
@@ -397,7 +279,7 @@
     transitionTimer: null
   };
 
-  /* ---------- cola persistida (por propietario, 8.4.1) ---------- */
+  /* ---------- Cola persistida por propietario ---------- */
 
   function emptyQueue() {
     return { attempts: [], sessions: [], activity: [], wrongEvents: [], streakDays: [], failed: {} };
@@ -434,7 +316,7 @@
     const q = readQueue(owner);
     if (!Array.isArray(q[kind])) q[kind] = [];
     const key = dedupeKeyFn(entry);
-    if (key && q[kind].some((e) => dedupeKeyFn(e) === key)) return false; /* ya en cola */
+    if (key && q[kind].some((e) => dedupeKeyFn(e) === key)) return false;
     q[kind].push(entry);
     writeQueue(q, owner);
     return true;
@@ -461,7 +343,7 @@
     writeQueue(q, owner);
   }
 
-  /* Dead-letter (8.4.1, M5): aparta eventos SIN retirarlos del
+  /* Dead-letter: aparta eventos SIN retirarlos del
      almacenamiento (recuperación manual documentada). Solo para errores
      permanentes; los transitorios siguen reintentando con backoff. */
   function deadLetter(kind, entries, reason, owner) {
@@ -504,10 +386,8 @@
     return JSON.stringify({
       resources: data.resources,
       tests: { best: data.tests.best, last: data.tests.last, wrong: data.tests.wrong,
-        /* 8.5.4 (B1): srs en el snapshot — sin esto, un save puramente SRS
-           (scheduleSrs → save) no dispara scheduleStatePush y la tarjeta
-           nunca se sube por su cuenta (observable en navegador: fila local
-           sin fila remota hasta el próximo ciclo por otra vía). */
+        /* SRS debe participar en el snapshot: scheduleSrs solo llama a save,
+           y sin este campo una valoración no programaría el push de estado. */
         srs: data.tests.srs },
       cases: data.cases,
       streak: data.streak,
@@ -519,7 +399,6 @@
   SMR.progress.save = function () {
     const before = runtime.lastSnapshot;
     const result = originalSave.call(SMR.progress);
-    /* 8.5.13: el slot vivo acaba de quedar con el contenido de ESTA pestaña */
     writeLiveWriter(liveOwnerFor());
     const after = snapshotProgress(SMR.progress.data);
     if (before !== undefined && before !== after) {
@@ -547,7 +426,7 @@
         }, (e) => `${e.test_id}|${e.mode}|${e.created_at}`);
       }
       /* wrong_answer_events derivados del payload de answers.
-         8.4.1 (C1): cada evento lleva created_at (epoch-ms cliente, orden
+         Cada evento lleva created_at (epoch-ms cliente, orden
          estable intra-chunk) — identidad ESTABLE del evento, requerida
          por la RPC para el anti-join de idempotencia. client_created_at
          se conserva como marca de diagnóstico. */
@@ -557,7 +436,7 @@
         payload.answers.forEach((a, idx) => {
           const stable = srsMod ? srsMod.idOf(payload.testId, a.origIndex) : null;
           const questionKey = stable || String(a.origIndex);
-          const eventTs = baseTs + idx; /* orden estable intra-chunk */
+          const eventTs = baseTs + idx;
           enqueueEvent('wrongEvents', {
             test_id: payload.testId, question_key: questionKey,
             event_type: a.ok ? 'clear' : 'add',
@@ -624,7 +503,7 @@
     } catch (err) { warn('hook toggleCompleted', err); }
     return result;
   };
-  /* hooks de borrado SRS (fase 8.5.7): la tarjeta se borra local y la
+  /* Hooks de borrado SRS: la tarjeta se borra local y la
      marca en progressSyncSrsClears hace que el push suba el tombstone y
      que el pull no la resucite. En modo visitante (sin sesión) la marca
      queda local igual que el borrado: cero llamadas RPC. */
@@ -660,11 +539,6 @@
     }
   }
 
-  /* 8.4.1 (B3): se eliminaron las utilidades UTC muertas (dayKeyToDate /
-     dateToDayKey). La única convención de días es la cadena local
-     'YYYY-MM-DD' de app.js dayKey(); la derivación de racha compara esas
-     cadenas como días consecutivos (UTC-midnight diffs), consistente en
-     cualquier zona horaria. */
 
   function chunkId() {
     return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
@@ -707,7 +581,7 @@
 
   function pushEvents() {
     const ATTEMPT_LIMIT = 100;
-    /* 8.4.1 (A1): se leen y se retiran eventos SIEMPRE de la cola del
+    /* se leen y se retiran eventos SIEMPRE de la cola del
        propietario capturado aquí; si la sesión cambia a mitad de envío,
        el resto de eventos queda en su cola original (no se re-atribuyen). */
     const owner = currentOwner();
@@ -725,7 +599,7 @@
 
     return chainOrNow(async () => {
       for (const job of jobs) {
-        /* 8.4.1 (A1): si la sesión cambió a mitad de push, abortar sin
+        /* si la sesión cambió a mitad de push, abortar sin
            retirar nada — cada evento volverá a enviarse con SU cuenta. */
         if (currentOwner() !== owner) return;
         const cid = chunkId();
@@ -739,12 +613,11 @@
             p_last_created_at: Math.max.apply(null, times)
           });
           if (error) { const e = new Error(error.message); e.code = error.code; throw e; }
-          /* éxito (insertados o ya-duplicados): quitar del queue por clave */
           removeQueued(job.kind, job.events, owner);
         } catch (err) {
           warn('push ' + job.kind, err);
           if (isAuthError(err)) { runtime.authPaused = true; return; } /* no dead-letter: se reintenta tras reautenticar */
-          /* 8.4.1 (M5): un dominio fallido NO bloquea a los demás — se
+          /* un dominio fallido NO bloquea a los demás — se
              continúa con el resto de jobs en lugar de abandonar el ciclo. */
           if (isPermanentError(err)) {
             deadLetter(job.kind, job.events, err.message, owner);
@@ -753,7 +626,7 @@
         }
       }
       if (currentOwner() !== owner) return;
-      pushState(); /* tras eventos, empuja también estado derivado */
+      pushState();
       /* Los eventos transitorios fallidos siguen en la cola: drainQueue
          detecta `still > 0` y programa el reintento con backoff. */
     });
@@ -763,7 +636,7 @@
      PUSH: estado (test_scores, resource_state, streak_days, case_solutions)
      ================================================================ */
 
-  /* 8.4.4 (H-1): identidad de sesión para operaciones cloud de estado.
+  /* identidad de sesión para operaciones cloud de estado.
      Captura el objeto base `SMR.progress.data` con el que comenzó la
      operación; tras cada `await` relevante, `sessionChangedFor()`
      detecta (a) cambio de cuenta/owner y (b) que el objeto vivo fue
@@ -791,13 +664,9 @@
       const sessionHandle = sessionHandleFor();
       const now = Date.now();
 
-      /* --- test_scores: derivar de history + best local ---
-         8.4.1 (A3): best_pct se mergea con MAX(local, cloud) sobre
-         lectura fresca — un dispositivo con peor marca NUNCA regresa el
-         best de la caché cloud (la política documentada "best = MAX" se
-         implementa de verdad). last_pct = último attempt local (que ya
-         incluye el pull); si no hay historial local, se conserva el
-         valor cloud en vez de pisarlo con null. */
+      /* test_scores combina best con MAX sobre lectura fresca: otro dispositivo
+         no puede rebajar la mejor marca. last usa el intento más reciente;
+         sin historial local se conserva el valor cloud en vez de escribir null. */
       let cloudBest = {};
       let cloudLast = {};
       try {
@@ -813,7 +682,7 @@
         warn('pull test_scores (pre-merge)', err);
         return; /* sin lectura fresca no hay merge seguro: se reintenta */
       }
-      /* 8.4.4 (H-1): la cuenta cambió mientras se LEÍAN los test_scores
+      /* la cuenta cambió mientras se LEÍAN los test_scores
          del cloud de A: abortar ANTES de cualquier upsert. Si no, las
          filas derivadas del estado vivo (ahora de B) se enviarían con
          user_id de A. */
@@ -834,7 +703,6 @@
           client_updated_at: now
         };
       });
-      /* tests.last sin best (modo que no afecta best) también persiste */
       Object.keys(data.tests.last).forEach((testId) => {
         if (!scoresByTest[testId] && typeof data.tests.last[testId] === 'number') {
           scoresByTest[testId] = {
@@ -861,12 +729,11 @@
         const { error } = await sb.from('test_scores').upsert(scoreRows, { onConflict: 'user_id,test_id' });
         if (error) { warn('push test_scores', error); return; }
       }
-      /* 8.4.4 (H-1): tras el upsert de scores, si la sesión cambió no se
+      /* tras el upsert de scores, si la sesión cambió no se
          continúa con streak/resource/case (evita leer el estado de B y
          mesclarlo en las escrituras de A). */
       if (sessionChangedFor(sessionHandle)) return;
 
-      /* --- streak_days: unión por día (los nuevos ya están en cola) --- */
       const q = readQueue(owner);
       if (Array.isArray(q.streakDays) && q.streakDays.length) {
         const rows = q.streakDays.map((e) => ({ user_id: uid, day: e.day }));
@@ -879,13 +746,12 @@
       if (sessionChangedFor(sessionHandle)) return;
       await syncResourceState(uid, now, sessionHandle);
 
-      /* 8.4.4 (H-1): guard antes de casos (la cuenta pudo cambiar durante
+      /* guard antes de casos (la cuenta pudo cambiar durante
          el merge de resource_state) */
       if (sessionChangedFor(sessionHandle)) return;
-      /* --- case_solutions --- */
       await syncCaseSolutions(uid, now, sessionHandle);
 
-      /* 8.5: srs_cards (estado por tarjeta; hereda guards de sesión y
+      /* srs_cards (estado por tarjeta; hereda guards de sesión y
          serialización del mismo pushState encolado). */
       if (sessionChangedFor(sessionHandle)) return;
       await syncSrsCards(uid, now, sessionHandle);
@@ -935,10 +801,8 @@
       const lc = local.completed[id] || null;
       const ls = typeof local.selfAssessment[id] === 'number' ? local.selfAssessment[id] : null;
       const c = cloudById[id] || {};
-      /* marca de clear local (si existe para este recurso) */
       const localClearAt = typeof clears[id] === 'number' ? clears[id] : null;
 
-      /* viewed: MAX de ambos */
       const viewed = Math.max(lv || 0, c.viewed_at || 0) || null;
 
       /* completed: activo si local activo O cloud activo (completed_at > completed_cleared_at) */
@@ -950,13 +814,10 @@
 
       let completed = null;
       if (localActive && (!effectiveClearAt || effectiveClearAt < lc)) {
-        /* local activo y su clear (si lo hay) es anterior → activo */
         completed = Math.max(lc, cloudActive ? c.completed_at : 0) || lc;
       } else if (localActive) {
-        /* local activo pero con clear local posterior → des-completado */
         completed = null;
       } else if (localClearWins && localClearAt >= (cloudActive ? c.completed_at : 0)) {
-        /* clear local posterior al completed del cloud → des-completado */
         completed = null;
       } else if (cloudActive) {
         completed = c.completed_at;
@@ -964,7 +825,6 @@
       /* completed_cleared_at a subir: el más reciente de ambos mundos */
       const completedClearedAt = effectiveClearAt;
 
-      /* self_assessment: último por _at */
       let selfAssessment = ls;
       let selfAssessmentAt = ls !== null ? now : null;
       if (c.self_assessment !== null && c.self_assessment !== undefined) {
@@ -975,7 +835,6 @@
 
       if (viewed || completed || completedClearedAt) upserts.push({ user_id: uid, resource_id: id, viewed_at: viewed, completed_at: completed, completed_cleared_at: completedClearedAt, self_assessment: selfAssessment, self_assessment_at: selfAssessmentAt, client_updated_at: now });
 
-      /* actualizar el local con lo que venga del cloud */
       if (c.viewed_at && (!lv || c.viewed_at > lv)) { mergedLocal.viewed[id] = c.viewed_at; localChanged = true; }
       if (cloudActive && (!lc || c.completed_at > lc) && (!effectiveClearAt || effectiveClearAt < c.completed_at)) { mergedLocal.completed[id] = c.completed_at; localChanged = true; }
       if (selfAssessment !== null && selfAssessment !== ls) { mergedLocal.selfAssessment[id] = selfAssessment; localChanged = true; }
@@ -986,7 +845,7 @@
       }
     });
 
-    /* 8.4.4 (H-1): si el estado vivo (obj) cambió de dueño a mitad del
+    /* si el estado vivo (obj) cambió de dueño a mitad del
        MERGE, abortar sin upsert y sin tocar el local: la lectura
        `local` puede tener datos de la cuenta nueva. */
     if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return;
@@ -1024,7 +883,7 @@
       return;
     }
 
-    /* 8.4.4 (H-1): abortar si el estado vivo cambió de dueño mientras se
+    /* abortar si el estado vivo cambió de dueño mientras se
        leía case_solutions del cloud de A. */
     if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return;
 
@@ -1043,9 +902,7 @@
         /* local igual o más reciente → subir (LWW por ts de cliente) */
         upserts.push({ user_id: uid, case_id: cid, option: l.option, client_updated_at: l.ts || now });
       } else {
-        /* 8.4.1 (M2): cloud más reciente → se refleja en local (antes el
-           local se quedaba y los dispositivos divergían para siempre).
-           Determinista: gana el ts de cliente más alto; empate → local. */
+        /* Las soluciones usan el ts de cliente más alto; en empate gana local. */
         local[cid] = { option: c.option, ts: c.client_updated_at || now };
         localChanged = true;
       }
@@ -1063,7 +920,7 @@
   }
 
   /* ================================================================
-     Fase 8.5: srs_cards — estado POR TARJETA, unión conservadora
+     srs_cards — estado POR TARJETA, unión conservadora
 
      Tarjeta local: tests.srs[key] = { level, due }, key = q-<16hex>
      (SMR.srs.isStableKey). Política de conflicto (unidad: tarjeta entera):
@@ -1082,7 +939,7 @@
      ANTES de que el merge pudiera verla (pérdida de progreso). El push
      final envía el estado local YA mezclado, idempotente por PK.
 
-     Política de borrado (fase 8.5.7): tombstones remotos y recuperación explícita.
+     Política de borrado: tombstones remotos y recuperación explícita.
       La ausencia local, por sí sola, NUNCA elimina una fila remota. Los borrados se
      sincronizan mediante tombstones y la recuperación mediante `revived=true`;
      no se ejecuta un DELETE físico remoto. Una fila remota de una pregunta
@@ -1094,7 +951,7 @@
   const SRS_KEY_OK = /^q-[0-9a-f]{16}(?:-\d+)?$/;
   const SRS_CARD_LIMIT = 500;
 
-  /* --- fase 8.5.7: borrado remoto de tarjetas SRS ---
+  /* --- Borrado remoto de tarjetas SRS ---
 
      Marca local por clave estable en progressSyncSrsClears (clave de
      SLOT_KEYS: hereda el aislamiento por propietario del progreso).
@@ -1134,7 +991,7 @@
     } catch (err) { warn('marcas de borrado SRS', err); }
   }
 
-  /* 8.5.14: la clave de marcas es COMPARTIDA entre pestañas y el ciclo de SRS
+  /* la clave de marcas es COMPARTIDA entre pestañas y el ciclo de SRS
      la lee antes de un `await` (la RPC). Escribir de vuelta la copia leída
      perdía las marcas que otra pestaña crease durante la espera: el tombstone
      no llegaba nunca a la nube y el pull siguiente resucitaba la tarjeta.
@@ -1205,7 +1062,7 @@
     if (!local || typeof local !== 'object' || Array.isArray(local)) return;
 
     /* 1. PULL (antes de cualquier push: ver orden en la cabecera). */
-    const cloudTomb = {}; /* claves con fila tombstone en cloud (8.5.7) */
+    const cloudTomb = {}; /* claves con tombstone en cloud */
     let cloudRows = [];
     try {
       const { data, error } = await sb.from('srs_cards')
@@ -1221,7 +1078,6 @@
     const cloudById = {};
     cloudRows.forEach((r) => {
       if (!r || !SRS_KEY_OK.test(r.question_key)) return;
-      /* tombstone (fase 8.5.7): la fila está marcada como borrada */
       if (r.deleted_at !== null && r.deleted_at !== undefined) { cloudTomb[r.question_key] = true; return; }
       if (srsValidCard(r)) cloudById[r.question_key] = r;
     });
@@ -1237,11 +1093,11 @@
     const keys = new Set(Object.keys(local).filter((k) => SRS_KEY_OK.test(k) && srsValidCard(local[k])));
     Object.keys(cloudById).forEach((k) => { if (resolveLocal(k)) keys.add(k); });
 
-    /* 2a. TOMBSTONES cloud (8.5.7): retirar la copia local y recordar el
+    /* TOMBSTONES cloud: retirar la copia local y recordar el
        borrado. Con marca 'revive' (el propietario re-valoró después) se
        conserva la tarjeta local: el push la subirá revived=true. */
     const clears = readSrsClears();
-    /* 8.5.14: las transiciones se APUNTAN y se aplican al final sobre una
+    /* las transiciones se APUNTAN y se aplican al final sobre una
        lectura fresca de la clave (nunca escribiendo esta copia, que puede
        quedar obsoleta durante el await). `clears` sigue siendo la vista de
        ESTE ciclo para las decisiones y para construir el push. */
@@ -1283,20 +1139,20 @@
          observado el tombstone (revive en otro dispositivo) → se acepta la
          tarjeta y la marca deja de ser necesaria. */
       if (state === 'known' && c) setClear(k, null, 'known');
-      if (!c) return; /* solo local: se subirá en el push final */
+      if (!c) return;
       const localValid = srsValidCard(l);
       let winner = 'local';
       if (!localValid) {
-        winner = 'cloud'; /* tarjeta local corrupta: la válida remota gana */
+        winner = 'cloud';
       } else if (c.level > l.level) {
-        winner = 'cloud';                       /* regla 1: level mayor */
+        winner = 'cloud';
       } else if (c.level === l.level) {
         if (c.due > l.due) {
-          winner = 'cloud';                     /* regla 2: revisión más reciente */
+          winner = 'cloud';
         } else if (c.due === l.due) {
           const cAt = typeof c.client_updated_at === 'number' && isFinite(c.client_updated_at) ? c.client_updated_at : -1;
           const lAt = typeof l.client_updated_at === 'number' && isFinite(l.client_updated_at) ? l.client_updated_at : -1;
-          if (cAt > lAt) winner = 'cloud';      /* regla 3: ts de cliente */
+          if (cAt > lAt) winner = 'cloud';
         }
       }
       /* empate total → local (determinista, independiente del orden) */
@@ -1308,17 +1164,12 @@
 
     if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return;
 
-    /* 3. PUSH post-merge vía RPC merge_srs_cards (8.5.3): el SERVIDOR
-       resuelve el conflicto atómicamente por tarjeta con
-       INSERT ... ON CONFLICT DO UPDATE (la política de merge corre en la
-       expresión del UPDATE), cerrando la carrera H-1 entre la lectura y
-       la escritura de dos dispositivos. NOTA (8.5.3): SIN fallback al
-       upsert LWW antiguo — si la RPC falla (no instalada/permisos/red),
-       el progreso local permanece intacto y el push se reintenta en el
-       próximo ciclo; un fallback LWW reabriría la carrera. user_id nunca
-       se envía: el servidor usa auth.uid().
-       Copia local mostrada mientras dura el await: no marcamos
-       "sync OK"; el pull del siguiente ciclo corrige si hubo divergencia. */
+    /* La RPC merge_srs_cards resuelve cada conflicto atómicamente con
+       INSERT ON CONFLICT DO UPDATE. No hay fallback a upsert LWW: reabriría
+       la carrera entre lectura y escritura de dos dispositivos.
+       auth.uid() atribuye el usuario; nunca se envía user_id. Si falla, el
+       merge local se conserva y se reintenta. Mientras espera no se anuncia
+       sync OK; el siguiente pull corrige cualquier divergencia. */
     const upserts = [];
     const reviveSent = [];
     Object.keys(local).forEach((k) => {
@@ -1337,21 +1188,17 @@
     if (upserts.length) {
       const { data: mergeRes, error } = await sb.rpc('merge_srs_cards', { p_cards: upserts });
       if (error) {
-        /* 8.5.3-E (H-1 de 8.5.3-R): diagnóstico permanente de "migración
-           00006/00007 no aplicada en este backend". NO es un error de red
-           transitorio: lo persistente requiere intervención (aplicar la
-           migración) y no debe generar reintento agresivo. Orden seguro de
-           despliegue futuro: PRIMERO la función SQL en el backend, DESPUÉS
-           el JavaScript que solo usa la RPC. Sin fallback al upsert LWW. */
+        /* PGRST202 indica que falta la RPC: requiere aplicar la migración antes
+           de desplegar este cliente, no reintentar agresivamente ni usar LWW. */
         const msg = (error && error.message) || String(error);
         if (/merge_srs_cards|does not exist|404|schema cache/i.test(msg)) {
           if (runtime.srsRpcMissing !== msg) {
-            runtime.srsRpcMissing = msg; /* se limpia al éxito del push */
+            runtime.srsRpcMissing = msg;
             warn('srs push SIN posibilidad de subir progreso: merge_srs_cards no está disponible en este backend (aplicar migración 00006/00007)', new Error(msg));
           }
         } else {
           runtime.srsRpcMissing = null;
-          warn('push srs_cards (merge_srs_cards)', error); /* transitorio: reintento posterior */
+          warn('push srs_cards (merge_srs_cards)', error);
         }
       } else {
         runtime.srsRpcMissing = null;
@@ -1366,11 +1213,11 @@
       }
     }
 
-    /* 8.5.14: (1) si el propietario cambió durante el await, no se escribe
+    /* (1) si el propietario cambió durante el await, no se escribe
        NADA — ni marcas ni progreso local: una respuesta tardía de un
        propietario anterior no puede tocar el estado del actual. La primera
        comprobación cubre el cambio procesado por ESTA pestaña; la segunda, el
-       caso de pestaña retrasada: el marcador persistido (8.5.11) dice que el
+       caso de pestaña retrasada: el marcador persistido dice que el
        slot vivo ya es de otro dueño. (2) Si sigue siendo el mío, se aplican
        las transiciones decididas sobre una lectura FRESCA de la clave,
        preservando lo que otra pestaña haya marcado entretanto. */
@@ -1396,8 +1243,7 @@
 
     /* --- test_attempts: union al history local (dedupe por test|mode|ts) --- */
     try {
-      /* 8.4.1 (M6): se piden los 200 MÁS RECIENTES (desc) — con más de
-         200 intentos cloud, el orden ascendente perdía los últimos. */
+      /* El límite debe tomar los más recientes; ascendente perdería los últimos. */
       const { data: attempts, error } = await sb.from('test_attempts')
         .select('test_id, title, mode, correct, total, pct, created_at')
         .eq('user_id', uid)
@@ -1421,12 +1267,11 @@
       }
     } catch (err) { warn('pull test_attempts', err); }
 
-    /* 8.4.4 (H-1): el fetch de attempts estaba en vuelo cuando la cuenta
+    /* el fetch de attempts estaba en vuelo cuando la cuenta
        cambió: los datos del cloud de A NO se instalan en el estado de B.
        (Se comprueba ANTES de derivaçar best/last y del upsert de scores.) */
     if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
 
-    /* --- derivar best/last desde el historial unificado --- */
     if (localChanged) {
       data.tests.history.forEach((h) => {
         const affectsBest = h.mode === 'practica' || h.mode === 'completo' || h.mode === 'examen';
@@ -1435,7 +1280,6 @@
         }
         data.tests.last[h.testId] = h.pct;
       });
-      /* refrescar test_scores en cloud con los valores MERGE */
       const now = Date.now();
       const rows = Object.keys(data.tests.best).map((testId) => {
         const lastEntry = [...data.tests.history].reverse().find((h) => h.testId === testId);
@@ -1447,7 +1291,7 @@
       }
     }
 
-    /* --- wrong_answers: caché cloud ← replay local (los events van aparte) --- */
+    /* La caché de wrong_answers solo aumenta los contadores locales. */
     try {
       const { data: cache, error } = await sb.from('wrong_answers')
         .select('test_id, question_key, count')
@@ -1473,7 +1317,6 @@
         .order('day', { ascending: false })
         .limit(400);
       if (error) throw new Error(error.message);
-      /* deriva racha cloud: días consecutivos hacia atrás desde el último */
       const sorted = (days || []).map((r) => r.day).sort().reverse();
       if (sorted.length) {
         let count = 1;
@@ -1516,7 +1359,7 @@
       }
     } catch (err) { warn('pull study_sessions', err); }
 
-    /* 8.4.4 (H-1): si el estado vivo ya es de otro dueño, NO persistir:
+    /* si el estado vivo ya es de otro dueño, NO persistir:
        escribir aqui guardaría datos de A dentro del estado de B. */
     if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
 
@@ -1534,12 +1377,9 @@
      Orquestación
      ================================================================ */
 
-  /* 8.4.1 (A1): al entrar una cuenta se ADOPTAN los eventos sin
-     atribuir (guest) y los de la cola legada (pre-8.4.1): son actividad
-     local de este dispositivo sin dueño conocido y pasa a la primera
-     cuenta que entra (política 8.3 "el dispositivo que inicia sesión
-     gana"). Nada se borra: si la adopción no puede escribirse, los
-     eventos quedan donde estaban. */
+  /* La primera cuenta que entra adopta los eventos sin atribuir (guest
+     y cola legada) de este dispositivo. Si la adopción no puede escribirse,
+     los eventos se conservan donde estaban. */
   function adoptUnattributedEvents(uid) {
     const target = readQueueFor(uid);
     let targetChanged = false;
@@ -1572,11 +1412,9 @@
   function initialSync(user) {
     if (!user) return Promise.resolve();
     runtime.currentUser = user;
-    /* 8.4.1 (A2): el guard es POR USUARIO, no global — antes, un cambio
-       de cuenta a mitad de sync hacía que el sync inicial de la cuenta
-       nueva se descartara para siempre (syncing seguía true). Ahora cada
-       usuario tiene su propio job encolado en la cadena serializada. */
-    /* 8.6.3: re-login de la MISMA cuenta —el caso típico tras un 401— no tiene
+    /* El sync inicial se identifica por usuario: una operación en vuelo
+       no puede impedir la sincronización de la cuenta nueva. */
+    /* re-login de la MISMA cuenta —el caso típico tras un 401— no tiene
        trabajo inicial nuevo, pero la cola pudo quedar PAUSADA por el error de
        autenticación: hay que reanudarla, o los eventos no confirmados se
        quedarían sin enviar hasta que otra actividad programe un drenaje. */
@@ -1585,10 +1423,10 @@
     runtime.syncing = true;
     return enqueue(async () => {
       try {
-        if (runtime.currentUser !== user) return; /* logout a mitad: nada que hacer */
+        if (runtime.currentUser !== user) return;
         const uid = user.id;
         adoptUnattributedEvents(uid);
-        /* 8.4.4 (H-1): el sync inicial lleva su propio handle de sesión
+        /* el sync inicial lleva su propio handle de sesión
            para que ninguna de sus escrituras cloud consuma el estado de
            otra cuenta instalado mientras los awaits están en vuelo. */
         const sessionHandle = sessionHandleFor();
@@ -1604,7 +1442,7 @@
       } catch (err) {
         warn('initialSync', err);
       } finally {
-        /* 8.4.1 (A2): SIEMPRE se libera el flag. Solo el job del usuario
+        /* SIEMPRE se libera el flag. Solo el job del usuario
            actual lo limpia: si la cuenta cambió, el flag ya pertenece al
            job de la cuenta nueva. */
         if (runtime.initialSyncFor === user.id) runtime.syncing = false;
@@ -1615,7 +1453,7 @@
 
   function drainQueue() {
     if (runtime.authPaused) return;
-    if (runtime.transitionPending) return; /* 8.6.3: sin exclusión no hay sesión conmutada: no se escribe */
+    if (runtime.transitionPending) return; /* sin exclusión no hay sesión conmutada: no se escribe */
     if (!runtime.currentUser || runtime.syncing) return;
     const owner = currentOwner();
     const q = readQueue(owner);
@@ -1648,14 +1486,9 @@
     }, runtime.retryDelay);
   }
 
-  /* ---------- contrato de propiedad de sesión (fase 8.6.3) ----------
-     cloud-profile.js comparte el slot 'studentProfile' (está en SLOT_KEYS)
-     pero se carga ANTES que este módulo, así que su listener de
-     'smr:authchange' corre ANTES que la transición de slots de aquí: leía la
-     clave viva cuando todavía era del dueño anterior y subía el perfil de A a
-     la fila cloud de B (reproducido en tests/profile-owner.test.js). La
-     transición se ANUNCIA por este contrato —no por el orden de listeners— y
-     el consumidor espera a que el slot de SU uid esté instalado. */
+  /* cloud-profile comparte studentProfile y se carga antes que este módulo.
+     SMR.cloudSession anuncia la transición y permite esperar al slot del uid
+     correcto; el orden de listeners no demuestra quién es dueño del contenido. */
   const session = {
     owner: runtime.liveOwner, /* dueño del slot vivo según el último anuncio */
     generation: 0,            /* se incrementa en cada transición completada */
@@ -1704,7 +1537,7 @@
     owner: function () { return slotOwnerNow(); },
     token: function () { return { owner: slotOwnerNow(), generation: session.generation }; },
     isCurrent: function (t) { return !!t && slotOwnerNow() === t.owner && session.generation === t.generation; },
-    /* 8.6.3: estado observable — la transición está diferida por falta de
+    /* estado observable — la transición está diferida por falta de
        exclusión. Una UI puede avisar de que el cambio de cuenta no se ha
        aplicado y ofrecer reintentar o recargar. */
     transitionPending: function () { return !!runtime.transitionPending; },
@@ -1714,13 +1547,9 @@
     resumeSync: function () { return initialSync(runtime.currentUser); }
   };
 
-  /* ---------- intento de transición con recuperación (fase 8.6.3) ----------
-     Sin exclusión la transición NO se ejecuta. Pero DESCARTARLA dejaría el slot
-     sin archivar/restaurar (la razón por la que 8.5.12 la ejecutaba sin
-     protección), así que se DIFIERE: no se toca el slot ni el marcador, la
-     sesión en memoria no se conmuta, la sincronización queda bloqueada y se
-     reintenta con backoff ACOTADO. Una decisión de sesión nueva cancela el
-     reintento pendiente, de modo que un trabajo antiguo no se reactiva. */
+  /* Sin exclusión, la transición se difiere sin tocar slot ni marcador.
+     Se bloquea la sincronización y se reintenta con backoff acotado; una
+     decisión de sesión nueva cancela cualquier reintento anterior. */
   const MAX_TRANSITION_ATTEMPTS = 5;
 
   function removePendingOwner(owner) {
@@ -1745,7 +1574,6 @@
 
   function attemptSlotTransition(user, attempt, body) {
     const announcedOwner = user ? (user.id || 'user') : GUEST_OWNER;
-    /* una decisión nueva cancela el reintento anterior */
     if (runtime.transitionTimer) { clearTimeout(runtime.transitionTimer); runtime.transitionTimer = null; }
     runtime.deferredUser = user;
     runtime.deferredBody = body;
@@ -1755,7 +1583,7 @@
       finally { removePendingOwner(announcedOwner); notifySlot(announcedOwner); }
     }).then((ran) => {
       if (ran) {
-        runtime.transitionPending = false;   /* la sesión y el slot ya están alineados */
+        runtime.transitionPending = false;
         runtime.deferredUser = null;
         runtime.deferredBody = null;
         return true;
@@ -1782,23 +1610,19 @@
     const delay = Math.min(500 * Math.pow(2, attempt), 8000);
     runtime.transitionTimer = setTimeout(() => {
       runtime.transitionTimer = null;
-      if (runtime.deferredUser !== user) return; /* superada por otra decisión */
+      if (runtime.deferredUser !== user) return;
       attemptSlotTransition(user, attempt + 1, body);
     }, delay);
   }
 
   /* ---------- transiciones de sesión ---------- */
 
-  /* 8.4.2: re-instalar el progreso desde el slot tras un swap de
-     cuenta. sanitizeProgress NO está expuesto por app.js, así que
-     re-parseamos desde el store: la app hace lo mismo en el arranque
-     (SMR.progress.data = sanitizeProgress(store.get('progress'))).
-     Aquí NO mutamos el objeto vivo in-place (los reducers de app.js
-     pueden conservar referencias): se modifica SMR.progress.data
-     apuntando a un objeto FRESH sanitizado con las mismas reglas.
-     Si el store no tiene progreso, repone un defaultProgress vacío. */
+  /* Tras cambiar el slot, se sustituye SMR.progress.data por un objeto
+     sanitizado nuevo: los reducers pueden conservar referencias al anterior.
+     sanitizeProgress no es API pública, así que se aplica aquí la misma
+     validación de carga; un slot sin progreso produce el estado vacío. */
   function sanitizeProgressLocal() {
-    /* 8.5.13: esta pestaña acaba de leer el slot vivo: es también su base de
+    /* esta pestaña acaba de leer el slot vivo: es también su base de
        fusión (una pestaña pasiva que pasa a escribir no debe pisar los
        cambios que otra hizo mientras tanto). */
     refreshSlotBases();
@@ -1847,23 +1671,13 @@
     return fresh;
   }
 
-  /* 8.4.5 (H-2): exclusión mutua de transición de slots entre pestañas.
-     Web Locks API: peticiones de bloqueo de al mismo recurso se
-     atienden en orden de llegada (e inter-task). Así, dos transiciones
-     simultáneas de sesión en 2 pestañas SE SERIALIZAN: la segunda no
-     arranca hasta que la primera haya archivado, cuarentenado y
-     restaurado el slot vivo — se elimina el interleaving que en 8.4.5
-     corrompía slots per-owner (A/B/__guest__ con contenido del otro).
-     Sin navigator.locks (navegador antiguo, dejaras de test o mock sin
-     locks) se ejecuta directamente, comportamiento previo a 8.4.5. */
+  /* Las transiciones de slots requieren el mismo Web Lock entre pestañas.
+     El lock serializa archivado, cuarentena, restauración y marcador.
+     Sin exclusión garantizada se devuelve false sin ejecutar la transición;
+     el llamante decide cuándo reintentar. */
   function withSlotTransitionLock(fn) {
     let locks = null;
     try { locks = global.navigator && global.navigator.locks; } catch (e) { locks = null; }
-    /* 8.6.3: FAIL-CLOSED. La transición es crítica (archiva, restaura y
-       modifica el slot compartido y el marcador). Sin exclusión garantizada NO
-       se ejecuta: devuelve false y el llamante decide (diferir y reintentar, o
-       descartar si su operación es idempotente). Ejecutarla sin exclusión es
-       justo lo que el 8.4.5 reprodujo corrompiendo los slots per-owner. */
     if (!locks || typeof locks.request !== 'function') {
       warn('transición de slots sin exclusión: NO se ejecuta (Web Locks no disponible)', new Error('no-locks'));
       return Promise.resolve(false);
@@ -1883,24 +1697,15 @@
     });
   }
 
-  /* 8.4.5 (H-2): reconciliación pasiva a través del evento 'storage':
-     localStorage emite 'storage' SOLO a las PESTAÑAS DISTINTAS de la
-     que escribe. La pestaña que escribe no lo recibe (no corre riesgo:
-     su runtime fue actualizado por SU transición); las que NO
-     participaban re-instalan el estado del dueño si su dueño runtime
-     (runtime.currentUser) COINCIDE con el dueño del slot cambiado.
-     El re-instalado se hace bajo el MISMO lock de transición (evita
-     mezclarse a la mitad con una transición real de esta tab) y usa
-     restoreSlotFor(owner) directamente: restaura SIEMPRE el snapshot
-     del dueño que está activo AQUI, nunca adoptando contenido ajeno.
-     Es idempotente: solo re-instala si el slot vivo difiere del
-     snapshot del dueño (no hay bucle de eventos storage↔storage). */
+  /* storage solo llega a las otras pestañas. La pasiva restaura únicamente
+     el snapshot de su dueño actual, bajo el mismo lock de transición.
+     Si ya coincide con el slot vivo no escribe: evita bucles entre eventos. */
   function reconcilePassiveSlot(owner) {
     if (!owner || owner === UNKNOWN_OWNER) return;
     const targetOwner = owner;
     const runtimeOwner = runtime.currentUser ? (runtime.currentUser.id || 'user') : GUEST_OWNER;
     if (runtimeOwner !== targetOwner) return; /* no es mi dueño actual */
-    /* 8.5.12: además hay que confirmar con el MARCADOR PERSISTIDO que el slot
+    /* además hay que confirmar con el MARCADOR PERSISTIDO que el slot
        vivo es de este dueño. Sin esta comprobación, tras un logout hecho en
        otra pestaña esta pestaña (que aún se cree la cuenta) reinstalaría su
        snapshot obsoleto sobre el slot vivo, que ya es del visitante. Sin
@@ -1916,9 +1721,9 @@
       /* si el slot vivo YA coincide con el snapshot del dueño, nada que hacer */
       if (sameQuarantineContent(live, snapContent)) return;
       restoreSlotFor(targetOwner);
-      runtime.liveOwner = targetOwner; /* 8.5.11 (D-3): el slot vivo es suyo */
+      runtime.liveOwner = targetOwner;
       writeLiveOwner(targetOwner);
-      writeLiveWriter(targetOwner); /* 8.5.13: el slot instalado es suyo */
+      writeLiveWriter(targetOwner);
       runtime.lastSnapshot = undefined;
       SMR.progress.data = sanitizeProgressLocal();
       runtime.lastSnapshot = snapshotProgress(SMR.progress.data);
@@ -1953,11 +1758,11 @@
     global.addEventListener('smr:authchange', (event) => {
       const authUser = event.detail && event.detail.user;
       if (authUser) { runtime.authPaused = false; runtime.retryCount = 0; }
-      /* 8.6.3: la transición se intenta BAJO EXCLUSIÓN. Si no se puede
+      /* la transición se intenta BAJO EXCLUSIÓN. Si no se puede
          garantizar, se difiere y se reintenta (fail-closed). */
       attemptSlotTransition(authUser, 0, (announcedOwner) => {
       const user = authUser;
-      /* 8.5.11 (D-3) + 8.5.12: el dueño del slot vivo es el MARCADOR
+      /* El dueño del slot vivo es el MARCADOR
          PERSISTIDO (lo escribe la pestaña que ejecuta cada transición), no la
          memoria de ESTA pestaña. `runtime.currentUser` puede estar desfasado
          respecto al slot compartido: otra pestaña puede haber archivado,
@@ -1970,9 +1775,9 @@
       const prevOwner = persistedOwner
         ? slotOwnerOrUnknown(persistedOwner)
         : (runtime.currentUser ? (runtime.currentUser.id || 'user') : null);
-      const nextOwner = announcedOwner; /* 8.6.3: una sola fuente para el dueño */
+      const nextOwner = announcedOwner;
 
-      /* 8.4.2 (M-1): el slot vivo SIEMPRE se archiva bajo el dueño
+      /* el slot vivo SIEMPRE se archiva bajo el dueño
          actual ANTES de cualquier transición (logout o cambio de
          cuenta). Si el cambio es rápido A→B, el archivo de B solo
          se toca cuando le toque; el de A ya está custodiado aquí.
@@ -1988,12 +1793,11 @@
       if (user) {
         if (runtime.currentUser !== user) {
           if (prevOwner !== nextOwner) {
-            /* 8.4.2 (M-1, política de adopción): el progreso de
+            /* el progreso de
                VISITANTE custodiado en __guest__ se ADOPTA solo si esta
                cuenta NUNCA ha usado este dispositivo (no tiene slot
                propio) y no existe el slot de OTRA cuenta (es la
-               primera cuenta del dispositivo; 8.3 "el dispositivo que
-               inicia sesión gana"). Si la cuenta tuvo slot propio aqu
+               primera cuenta del dispositivo). Si la cuenta tuvo slot propio aquí
                o existe el de otra cuenta, NO se adopta (prohibido
                atribuir sin certeza). El contenido visitante permanece
                archivado en __guest__ para su recuperación manual. */
@@ -2021,24 +1825,18 @@
             }
             /* entrada de cuenta: restablecer el slot con SU snapshot
                (o limpio si es primera vez en este dispositivo).
-               8.4.4 (B-1): si NO hubo cuenta previa (visitante→cuenta),
+               Si NO hubo cuenta previa (visitante→cuenta),
                el contenido de visitante ya fue custodiado en __guest__
                por el guard de archivado (arriba), de modo que el wipe
                del slot para instalar el estado del dueño es siempre
                recuperable. */
             const hadPrev = !!prevOwner;
             if (hadPrev) quarantineUnownedContent(); /* contenido archivado ya bajo prevOwner: nada global con dueño incierto queda expuesto */
-            /* 8.5.8 (D-1): restaurar SIEMPRE el snapshot del dueño cuando
-               existe. La condición anterior (hadPrev || hasContent(...))
-               dejaba sin restaurar el caso "login sobre slot vivo vacío"
-               (el que deja un logout previo): el snapshot del dueño se
-               ignoraba y el pull reconstruía solo el estado cloud, con
-               pérdida del estado local no subido (un borrado SRS pendiente
-               hacía resucitar la tarjeta). restoreSlotFor ya escribe el
-               slot limpio cuando el dueño no tiene snapshot. */
+            /* Restaurar incluso sobre un slot vivo vacío: el snapshot puede contener
+               progreso local aún no subido, como un borrado SRS pendiente. */
             if (!canAdoptGuest) restoreSlotFor(nextOwner);
           }
-          /* 8.5.12: la copia en memoria se re-lee SIEMPRE del slot vivo, tanto
+          /* la copia en memoria se re-lee SIEMPRE del slot vivo, tanto
              con cambio real de dueño como cuando el slot vivo YA era de este
              dueño porque la transición la hizo otra pestaña (marcador
              coincidente). Sin esto, una pestaña pasiva se quedaba con el
@@ -2051,36 +1849,36 @@
           initialSync(user);
         }
       } else {
-        /* 8.4.1 (A1): al salir NO se toca ninguna cola — los eventos
+        /* al salir NO se toca ninguna cola — los eventos
            pendientes del usuario saliente quedan en
            smrhub:progressSyncQueue:<uid> y solo se enviarán con su
            sesión (recuperación explícita al volver a entrar). */
         runtime.currentUser = null;
         runtime.syncing = false;
-        runtime.initialSyncFor = null; /* re-login → sync inicial fresco */
+        runtime.initialSyncFor = null;
         if (runtime.retryTimer) { clearTimeout(runtime.retryTimer); runtime.retryTimer = null; }
         runtime.retryDelay = 3000;
         if (drainTimer) { clearTimeout(drainTimer); drainTimer = null; }
         if (stateTimer) { clearTimeout(stateTimer); stateTimer = null; }
-        /* 8.4.2 (M-1): pasar a modo visitante → restaurar el slot del
+        /* pasar a modo visitante → restaurar el slot del
            visitante (no el de la cuenta que acaba de salir, ya
            archivada arriba). Siendo prevOwner != GUEST_OWNER, aplica el
            restoreSlotFor encima. */
         if (prevOwner && prevOwner !== GUEST_OWNER) {
           restoreSlotFor(GUEST_OWNER);
         }
-        /* 8.5.12: igual que al entrar, la copia en memoria se re-lee del slot
+        /* igual que al entrar, la copia en memoria se re-lee del slot
            vivo (que ya es el del visitante): una pestaña pasiva no puede
            seguir escribiendo con el estado de la cuenta que acaba de salir. */
         runtime.lastSnapshot = undefined;
         SMR.progress.data = sanitizeProgressLocal();
       }
-      /* 8.5.11 (D-3): el slot vivo pertenece ya a nextOwner (se haya
+      /* el slot vivo pertenece ya a nextOwner (se haya
          restaurado, adoptado o quedado igual). Persistirlo es lo que hace
          que el próximo arranque sepa de quién es. */
       runtime.liveOwner = nextOwner;
       writeLiveOwner(nextOwner);
-      writeLiveWriter(nextOwner); /* 8.5.13: el slot queda con el contenido de nextOwner */
+      writeLiveWriter(nextOwner);
     }); /* fin del cuerpo: el anuncio y la resolución de esperas los hace attemptSlotTransition */
     });
   }

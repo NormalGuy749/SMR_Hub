@@ -1,17 +1,8 @@
 #!/usr/bin/env bash
-# =====================================================================
-# SMR Hub — Fase 8.7: privilegios y bloqueo RLS a nivel PostgreSQL.
-#
-# Capa distinta a tests/rest-rls-isolation.sh:
-#   - aquel prueba el aislamiento por la API REST real (como el cliente);
-#   - este prueba las GARANTÍAS del esquema: RLS habilitado por tabla,
-#     policies no permisivas, roles permitidos y privilegios de las
-#     funciones (incluido el camino del rol authenticator).
-#
-# Solo contra el stack LOCAL ya en marcha. No aplica nada remoto, no
-# crea ni borra datos: todo son consultas de catálogo y un SET ROLE
-# dentro de una transacción que termina en ROLLBACK.
-# =====================================================================
+# Comprueba RLS, policies, roles y privilegios en el catálogo PostgreSQL real;
+# el aislamiento por la API se prueba en rest-rls-isolation.sh.
+# Solo usa el stack local ya activo: consultas y SET ROLE con ROLLBACK,
+# sin crear ni borrar datos ni aplicar cambios remotos.
 set -u
 DB_CONTAINER="supabase_db_scratch_84val"
 [[ "$(docker ps --format '{{.Names}}' | grep -c "^${DB_CONTAINER}$")" == "1" ]] || { echo "FALLO: contenedor $DB_CONTAINER no activo" >&2; exit 2; }
@@ -40,8 +31,7 @@ echo "— Cobertura mínima por tabla (SELECT/INSERT propios donde el cliente es
 for t in $TABLES; do
   CMDS=$(sql "select string_agg(distinct cmd, ',' order by cmd) from pg_policies where schemaname='public' and tablename='$t';")
   case "$t" in
-    # 00009 (fase 8.8): feedback y question_reports ya no tienen INSERT
-    # directo; la RPC DEFINER es la única vía de alta.
+    # La RPC DEFINER es la única vía de alta de feedback y question_reports.
     entitlements|feedback|question_reports) EXPECT="SELECT" ;;
     test_attempts|wrong_answer_events|streak_days|study_sessions|activity_events) EXPECT="INSERT,SELECT" ;;
     progress_sync_chunks) EXPECT="DELETE,INSERT,SELECT" ;;
@@ -94,7 +84,7 @@ OUT=$(sql_fail "begin; select set_config('role','authenticated',true); select pu
 if [[ "$OUT" == *"permission denied"* || "$OUT" == *"auth required"* ]]; then ok "submit_feedback bajo authenticated sin claims falla cerrado"; else bad "submit_feedback authenticated sin claims" "$OUT" "permission denied o auth required"; fi
 check "$(sql "select count(*) from public.feedback;")" "$FB_BEFORE" "y no queda ninguna fila escrita por esos intentos"
 
-# La tabla ya no acepta INSERT directo del cliente (antes de 00009 sí).
+# La tabla solo permite altas mediante la RPC.
 OUT=$(sql_fail "begin; select set_config('role','authenticated',true); insert into public.feedback (user_id, category, message) values ('00000000-0000-0000-0000-000000000001','problema','x'); rollback;")
 if [[ "$OUT" == *"row-level security"* ]]; then ok "authenticated NO puede insertar feedback directo (RLS)"; else bad "insert directo feedback" "$OUT" "row-level security"; fi
 OUT=$(sql_fail "begin; select set_config('role','authenticated',true); insert into public.question_reports (user_id, test_id, question_key, reason) values ('00000000-0000-0000-0000-000000000001','t-redes','q-0000000000000001','otro'); rollback;")

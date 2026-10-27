@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-# SMR Hub — Fase 8.5.3-E: concurrencia REAL de merge_srs_cards.
+# Concurrencia de merge_srs_cards en PostgreSQL real.
 # Solo contra la BD local identificada por nombre de contenedor.
 # Coordinación: txn A escribe y sostiene el tuple-lock de la fila sin
 # commit; la txn B debe esperar ese commit (serialización REAL, no un

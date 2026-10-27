@@ -1,19 +1,9 @@
 #!/usr/bin/env bash
-# =====================================================================
-# SMR Hub — Fase 8.5.7: borrado SRS (tombstones + revive) contra la
-# función merge_srs_cards REAL en PostgreSQL local.
-#
-# Solo contra la BD local identificada por nombre de contenedor (mismo
-# criterio que tests/pg-local-concurrency.sh). NO aplica nada remoto.
-# Aplica la migración 00008 a esa BD local antes de probar (idempotente:
-# add column if not exists + create or replace).
-#
-# Distingue evidencia REAL (PostgreSQL) de los mocks Node:
-#   - CHECK srs_cards_level_range rechaza level = -1 (sentinel descartado).
-#   - deleted_at pegajoso: ninguna tarjeta viva lo limpia.
-#   - revive explícito (revived=true) es lo único que lo limpia.
-#   - deleted_at lo sella el servidor; auth.uid() y RLS gobiernan.
-# =====================================================================
+# Prueba merge_srs_cards en PostgreSQL local, no en un mock.
+# Aplica idempotentemente la migración 00008 al contenedor indicado antes
+# de probar; no utiliza el proyecto remoto.
+# deleted_at lo sella el servidor y solo revived=true lo limpia.
+# El CHECK rechaza niveles negativos; auth.uid() y RLS atribuyen cada fila.
 set -u
 DB_CONTAINER="supabase_db_scratch_84val"
 [[ "$(docker ps --format '{{.Names}}' | grep -c "^${DB_CONTAINER}$")" == "1" ]] || { echo "FALLO: contenedor no activo" >&2; exit 2; }

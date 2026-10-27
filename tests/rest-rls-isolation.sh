@@ -1,31 +1,11 @@
 #!/usr/bin/env bash
-# =====================================================================
-# SMR Hub — Fase 8.7: aislamiento entre usuarios con la API REAL.
-#
-# Qué es esto (y qué NO es):
-#   - REAL: PostgreSQL + PostgREST + GoTrue del stack local ya en marcha
-#     (no se instala ni se levanta nada). Las peticiones llevan un JWT
-#     REAL emitido por GoTrue con role=authenticated, así que la
-#     autoridad que se prueba es la de producción: RLS + permisos +
-#     PostgREST. Nada de mocks.
-#   - NO es el proyecto remoto: la URL y la clave pública se leen de
-#     js/cloud-config.js, que apunta al stack local (127.0.0.1:54321).
-#
-# Demuestra, por la misma vía que usa el cliente (la API REST):
-#   1. Un usuario no puede LEER filas de otro UID.
-#   2. Un usuario no puede INSERTAR filas atribuidas a otro UID.
-#   3. Un usuario no puede CAMBIAR user_id mediante UPDATE.
-#   4. Un usuario no puede BORRAR ni modificar filas ajenas.
-#   5. anon (solo clave pública) no ve nada.
-#   6. Las RPC (merge_srs_cards, sync_progress_chunk) escriben SOLO con
-#      auth.uid(), no son invocables por anon y no aceptan un uid ajeno.
-#   7. El libro de idempotencia (progress_sync_chunks) no es editable ni
-#      legible por otro usuario.
-#   8. updated_at lo sella el SERVIDOR: el cliente no puede falsificarlo.
-#
-# Limpieza: el harness solo crea y borra SUS PROPIOS usuarios de prueba
-# (*@local.test) y sus filas. No toca datos de nadie más.
-# =====================================================================
+# Prueba aislamiento, permisos y RPC por la API real de PostgreSQL,
+# PostgREST y GoTrue del stack local ya activo. Los JWT authenticated
+# son reales; no hay mocks. Usa cloud-config.js de desarrollo, que debe
+# apuntar al stack local; el script no valida que el destino sea loopback.
+# El harness crea y borra únicamente sus usuarios *@local.test y sus filas.
+# auth.uid() debe atribuir las escrituras y el servidor sellar updated_at;
+# el cliente no puede elegir otro dueño ni modificar datos ajenos.
 set -u
 
 FAIL=0; PASS=0
@@ -56,7 +36,7 @@ PW='rls-probe-pw-1'
 EMAIL_A='rls-probe-a@local.test'
 EMAIL_B='rls-probe-b@local.test'
 UID_A=''; UID_B=''; TOK_A=''; TOK_B=''
-# Usuarios SOLO para los límites de frecuencia (8.8): consumen su cuota, así que
+# Usuarios SOLO para los límites de frecuencia: consumen su cuota, así que
 # no se reutilizan para las comprobaciones de aislamiento.
 EMAIL_C='rls-probe-c@local.test'; EMAIL_D='rls-probe-d@local.test'
 UID_C=''; UID_D=''; TOK_C=''; TOK_D=''
@@ -177,9 +157,8 @@ check "$(body_of "$R" | json applied)" "1" "merge_srs_cards aplica 1 tarjeta"
 check "$(sql "select level from public.srs_cards where user_id='$UID_A' and question_key='$K_A';")" "3" "la tarjeta de A se actualiza"
 R=$(req POST "/rpc/merge_srs_cards" "$TOK_A" "{\"p_cards\":[{\"question_key\":\"$K_B\",\"level\":5,\"due\":999999,\"client_updated_at\":99999}]}")
 check "$(sql "select level from public.srs_cards where user_id='$UID_B' and question_key='$K_B';")" "4" "A no puede tocar la tarjeta de B enviando su clave por la RPC"
-# La clave de pregunta NO es única por dispositivo: es un identificador de
-# currículo. Lo que debe cumplirse es que cada uno tenga LA SUYA y que el
-# intento de A no haya tocado la copia de B.
+# La identidad de pregunta puede coincidir entre usuarios; sus filas no.
+# El intento de A no debe modificar la copia de B.
 check "$(sql "select count(*) from public.srs_cards where user_id='$UID_A' and question_key='$K_B';")" "1" "el intento de A crea SU propia tarjeta para esa clave (uid = auth.uid())"
 check "$(sql "select count(*) from public.srs_cards where user_id='$UID_B' and question_key='$K_B';")" "1" "B conserva exactamente una tarjeta para esa clave"
 check "$(sql "select count(distinct user_id) from public.srs_cards where question_key='$K_B';")" "2" "existen dos copias independientes (una por uid), sin mezclarse"

@@ -1,13 +1,7 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.5.4-C: pruebas del rate SRS en la lista de revisión.
-   MOCKS EXPLÍCITOS: DOM mínimo (querySelector/querySelectorAll closest),
-   SMR.srs real (js/srs.js cargado con New Function), SMR.progress
-   guardado con espía. NINGUNA prueba de esta suite toca Supabase real
-   ni una BD; la sincronización cloud real ya está cubierta por
-   srs-sync / h1-race / pg-local-concurrency.
-   ===================================================================== */
+/* Extrae el rate SRS real de tests.js con DOM mínimo, srs.js real
+   y progreso simulado con espía. No ejecuta sincronización remota. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -33,7 +27,7 @@ function extractFns(src, markers) {
    DOM mínimo isolado por prueba: raíces anidadas con querySelectorAll
    simple por nombres de clase/atributos, y closest del elemento clicks.
 ------------------------------------------------------------------ */
-  /* EventTarget respeta once: el mock anterior ocultaba listeners consumidos. */
+  /* EventTarget respeta once y permite detectar listeners consumidos. */
   function makeBtn(attrs, text) {
     const ds = Object.assign({}, attrs);
     const el = Object.assign(new EventTarget(), {
@@ -52,7 +46,6 @@ function extractFns(src, markers) {
     return el;
   }
 
-/* Cada botón creado tiene closest que devuelve su li contenedor. */
 function makeLi(testId, origIndex, rates, currentRateIdx) {
   const li = {
     dataset: { srsTest: testId, srsIndex: String(origIndex) },
@@ -60,17 +53,14 @@ function makeLi(testId, origIndex, rates, currentRateIdx) {
       if (selector === '[data-srs-rate]') return rates;
       return [];
     },
-    /* 8.5.9: la fila de borrado no participa en esta suite (solo su
-       refresco, que debe ser un no-op sin tarjeta borrada aquí). */
+    /* El borrado no se ejercita aquí; su refresco debe ser inocuo sin fila. */
     querySelector() { return null; }
   };
   rates.forEach((b) => { b._li = li; });
   return li;
 }
 
-/* Servicio de render de la prueba: extrae las funciones SRS_RATE_LABELS,
-   srsRateOf, srsRateHtml y wireSrsRating de js/tests.js tal cual, las
-   ejecuta con un esc progresi̇ simulado.可再生能源 */
+/* Las funciones de valoración se extraen del módulo real; progreso y esc se simulan. */
 function makeHarness(opts) {
   const o = opts || {};
   const srcSrs = fs.readFileSync('js/srs.js', 'utf8');
@@ -87,7 +77,6 @@ function makeHarness(opts) {
       ]
     }]
   };
-  /* SMR.esc real vía source de app.js no es necesario; esc mínima: */
   g.SMR = { esc: (v) => String(v).replace(/[<>&"]/g, ''), progress: null };
   new Function('window', 'globalThis', srcSrs)(g, g, g);
   g.SMR.srs.buildIndex();
@@ -104,8 +93,7 @@ function makeHarness(opts) {
     scheduleSrsCalls: [],
     scheduleSrs(testId, qIndex, rate) {
       this.scheduleSrsCalls.push({ testId, qIndex, rate });
-      /* Comportamiento real mínimo reutilizado del app.js original:
-         (semántica de re-valoración ya probada en su propia suite). */
+      /* Réplica mínima de scheduleSrs para observar identidad y persistencia. */
       const key = g.SMR.srs.idOf(testId, qIndex) || `${testId}:${qIndex}`;
       const cur = this.data.tests.srs[key];
       const current = cur && typeof cur.level === 'number' ? cur.level : 0;
@@ -124,11 +112,9 @@ function makeHarness(opts) {
     'const SRS_RATE_LABELS =',
     'function srsRateOf(',
     'function srsRateHtml(',
-    'function syncSrsDrop(', /* 8.5.9: wireSrsRating la usa al re-valorar */
+    'function syncSrsDrop(', /* wireSrsRating actualiza también la acción de borrado. */
     'function wireSrsRating('
   ]);
-  /* esc definida localmente por la suite es usada por los extracts;
-     la envolvemos. */
   const fn =    new Function('window', 'SMR', 'esc', 'progress',
     snippets + '\n;return { SRS_RATE_LABELS, srsRateOf, srsRateHtml, syncSrsDrop, wireSrsRating };'
   )(g, g.SMR, g.SMR.esc, () => progressMock);
@@ -136,7 +122,6 @@ function makeHarness(opts) {
   return { g, fn, progressMock, srsLocal, ID, hasOrphan: !!o.noStableQ };
 }
 
-/* ------------------------------------------------------------------ */
 (async function main() {
   /* --- 1. tres valoraciones llamadas con selfie rate correcto --------- */
   await (async () => {
@@ -147,7 +132,6 @@ function makeHarness(opts) {
     const li = makeLi('t-t1', 1, rates, null);
     h.fn.wireSrsRating({ querySelectorAll: () => rates });
     assert(h.progressMock.scheduleSrsCalls.length === 0, 'sin clic, sin llamada');
-    /* clic en rate 0 → UNA llamada con args correctos, estado activo */
     rates[0].click();
     assert(h.progressMock.scheduleSrsCalls.length === 1, 'una interacción, una única update');
     assert(h.progressMock.scheduleSrsCalls[0].testId === 't-t1', 'testId correcto');
@@ -155,7 +139,6 @@ function makeHarness(opts) {
     assert(h.progressMock.scheduleSrsCalls[0].rate === 0, 'rate correcto');
     assert(rates[0]._active === true, 'botón activo tras el clic');
     assert(rates[1]._active !== true && rates[2]._active !== true, 'otros rate inactivos');
-    /* una sola tarjeta persistida */
     assert(Object.keys(h.srsLocal).length === 1, 'una tarjeta persistida');
   })();
   record('clic único: una update (scheduleSrs) con testId/origIndex/rate correctos, estado visual');
@@ -168,7 +151,7 @@ function makeHarness(opts) {
                    makeBtn({ srsRate: '2' }, 'Lo sabía')];
     const li = makeLi('t-t1', 0, rates, null);
     h.fn.wireSrsRating({ querySelectorAll: () => rates });
-    rates[2].click(); /* Lo sabía */
+    rates[2].click();
     assert(h.progressMock.scheduleSrsCalls.length === 1, 'una update (2)');
     rates[0].click();
     rates[2].click();
@@ -204,7 +187,6 @@ function makeHarness(opts) {
   /* --- 3. pregunta SIN identidad → HTML vacío (sin tarjeta inválida) -- */
   await (async () => {
     const h = makeHarness();
-    /* idOf por posición no existente → null: */
     const html = h.fn.srsRateHtml('t-t1', 99);
     assert(html === '', 'sin tarjeta para posición inválida');
   })();
@@ -215,7 +197,6 @@ function makeHarness(opts) {
   /* --- 5. multi-test: identidad del test de origen ------------------- */
   await (async () => {
     const h = makeHarness();
-    /* el origen correcto se confirma porque el rate usa idOf(test, orig) */
     const keyA = h.g.SMR.srs.idOf('t-t1', 0);
     assert(/^q-[0-9a-f]{16}/.test(keyA), 'kev estable para test origen');
     /* fallback posicional no debe usarse cuando srs.js cargado: si hay
@@ -227,7 +208,6 @@ function makeHarness(opts) {
   record('multi-test: test de origen usado para la identidad');
 })().catch((e) => { console.error(e); failed++; });
 
-/* Resumen con exit code correcto */
 process.on('exit', () => {
   console.log(`\n── resumen ──`);
   console.log(`OK: ${passed}  FAIL: ${failed}`);

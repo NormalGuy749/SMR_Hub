@@ -1,8 +1,5 @@
 'use strict';
 
-/* SMR Hub — aplicación principal
-   Dashboard, Modo Estudio, recursos con autoevaluación, glosario con fichas,
-   estadísticas y router por hash. Todo en vanilla JS sin dependencias. */
 
 const SMR = (window.SMR = window.SMR || {});
 const D = window.SMR_DATA || { categories: [], resources: [], glossary: [], ports: [], tests: [], quickRefs: {} };
@@ -54,19 +51,12 @@ SMR.store = {
     try { localStorage.removeItem(STORE_PREFIX + key); } catch { /* sin almacenamiento */ }
   },
 
-  /* ---------- 8.5.13: escritura compartida entre PESTAÑAS ----------
-     Varias pestañas del mismo origen comparten localStorage. Guardar el
-     objeto completo desde la copia en memoria de una pestaña descarta lo que
-     otra acaba de guardar (pérdida de actualización independiente).
-     `written` guarda, por clave, la última versión que ESTA pestaña leyó o
-     escribió (la base); `writeMerged` aplica SOLO los cambios de esta pestaña
-     sobre la base y toma del store lo que no cambió aquí, de modo que los
-     cambios independientes de otra pestaña sobreviven. No inventa semántica
-     por dominio: si las dos pestañas tocan el MISMO valor, gana esta pestaña
-     (mismo comportamiento que un guardado completo) y el merge con la nube
-     sigue siendo el árbitro por dominio. `other` es la copia ajena a fusionar;
-     null = no fusionar (lo usa cloud-progress cuando el slot vivo pertenece a
-     otro propietario, para no mezclar dos cuentas). */
+  /* Varias pestañas comparten localStorage. written conserva la última
+     versión leída o escrita por esta pestaña; writeMerged aplica sus cambios
+     sobre esa base y conserva los cambios independientes del store.
+     Si ambas cambian el mismo valor, gana esta pestaña; el merge cloud
+     mantiene las reglas por dominio. other=null impide fusionar contenido
+     de otro propietario (contrato con cloud-progress). */
   written: {},
   /* Al ARRANCAR, o al volver a adoptar el slot vivo, esta pestaña conoce el
      estado actual: esa es su base de fusión. Sin base, el primer guardado de
@@ -127,7 +117,6 @@ const ICONS = {
   puzzle: '<path d="M19.4 14c.6 0 .9-.7.5-1.1l-.9-.9V8.4c0-.5-.4-.9-.9-.9h-3.6l-.9-.9c-.4-.4-1.1-.1-1.1.5v0c0 1-.8 1.8-1.8 1.8S9 8.1 9 7.1v0c0-.6-.7-.9-1.1-.5l-.9.9H3.4c-.5 0-.9.4-.9.9v3.6l-.9.9c-.4.4-.1 1.1.5 1.1 1 0 1.8.8 1.8 1.8S3.1 17.6 2.1 17.6c-.6 0-.9.7-.5 1.1l.9.9v3.6c0 .5.4.9.9.9h3.6l.9.9c.4.4 1.1.1 1.1-.5 0-1 .8-1.8 1.8-1.8s1.8.8 1.8 1.8c0 .6.7.9 1.1.5l.9-.9h3.6c.5 0 .9-.4.9-.9v-3.6l.9-.9c.4-.4.1-1.1-.5-1.1-1 0-1.8-.8-1.8-1.8s.8-1.8 1.8-1.8Z"/>',
   brain: '<path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/>',
 
-  /* Fase 8.2: iconos de autenticación (aditivos, no usados antes). */
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>'
 };
@@ -261,7 +250,7 @@ const SRS_MAX_LEVEL = SRS_INTERVALS.length - 1;
 const ACTIVITY_LIMIT = 40;
 const HISTORY_LIMIT = 60;
 
-/* ---------- 8.5.13: fusión de escrituras entre pestañas ---------- */
+/* ---------- Fusión de escrituras entre pestañas ---------- */
 
 /* Listas acumulativas: se unen por entrada en vez de sustituirse.
    `path` es la ruta real desde la raíz del objeto de progreso. Las listas no
@@ -288,8 +277,6 @@ function deepEqual(a, b) {
   return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEqual(a[k], b[k]));
 }
 
-/* Copia JSON: estos datos cruzan localStorage como JSON, así que un objeto se
-   copia exactamente igual (y sin ciclos). */
 function deepCopy(v) {
   return v === undefined ? v : JSON.parse(JSON.stringify(v));
 }
@@ -305,13 +292,13 @@ function slotMergeArray(spec, mine, theirs) {
    `base` como última versión conocida. Solo toca lo que las dos partes
    cambiaron respecto de la base. */
 function slotMergeValue(path, base, mine, theirs) {
-  if (deepEqual(mine, theirs)) return mine;      /* mismo contenido */
-  if (deepEqual(mine, base)) return theirs;      /* aquí no se tocó */
-  if (deepEqual(theirs, base)) return mine;      /* solo se tocó aquí */
+  if (deepEqual(mine, theirs)) return mine;
+  if (deepEqual(mine, base)) return theirs;
+  if (deepEqual(theirs, base)) return mine;
   const spec = SLOT_ARRAYS[path];
   if (spec && Array.isArray(mine) && Array.isArray(theirs)) return slotMergeArray(spec, mine, theirs);
   if (isPlainObject(mine) && isPlainObject(theirs)) return slotMergeObject(path, base, mine, theirs);
-  return mine;                                   /* las dos lo cambiaron: gana esta pestaña */
+  return mine;
 }
 
 function slotMergeObject(path, base, mine, theirs) {
@@ -418,9 +405,8 @@ function sanitizeProgress(raw) {
   const base = defaultProgress();
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
 
-  /* Fase 6C.5: conservar la versión almacenada (si es válida) para que la
-     migración del SRS posicional sepa si debe ejecutarse. Una versión
-     ausente o inválida se trata como 3: la migración es idempotente. */
+  /* La migración posicional necesita la versión almacenada. Si falta o no
+     es válida se trata como v3; ejecutar de nuevo la migración es seguro. */
   if (typeof raw.v === 'number' && isFinite(raw.v) && raw.v >= 1 && raw.v < PROGRESS_VERSION) {
     base.v = raw.v;
   } else if (raw.v !== PROGRESS_VERSION) {
@@ -448,7 +434,6 @@ function sanitizeProgress(raw) {
         base.tests.wrong[testId] = cleanNumberMap(tests.wrong[testId]);
       });
     }
-    /* SRS: { "testId:qIndex": { level, due } } con validación estricta */
     if (tests.srs && typeof tests.srs === 'object' && !Array.isArray(tests.srs)) {
       Object.keys(tests.srs).forEach((key) => {
         const item = tests.srs[key];
@@ -457,8 +442,8 @@ function sanitizeProgress(raw) {
         }
       });
     }
-    /* srsLegacy (fase 6C.5): entradas SRS antiguas no resolubles en la
-       migración. Se conservan intactas: nunca se descarta un dato. */
+    /* Las entradas SRS que la migración no puede resolver se conservan
+       en srsLegacy sin atribuirlas a otra pregunta. */
     if (tests.srsLegacy && typeof tests.srsLegacy === 'object' && !Array.isArray(tests.srsLegacy)) {
       Object.keys(tests.srsLegacy).forEach((key) => {
         const item = tests.srsLegacy[key];
@@ -469,7 +454,6 @@ function sanitizeProgress(raw) {
     }
   }
 
-  /* Casos prácticos resueltos: { caseId: { option, ts } } */
   if (raw.cases && typeof raw.cases === 'object' && typeof raw.cases.solved === 'object' && !Array.isArray(raw.cases.solved)) {
     Object.keys(raw.cases.solved).forEach((cid) => {
       const s = raw.cases.solved[cid];
@@ -479,7 +463,6 @@ function sanitizeProgress(raw) {
     });
   }
 
-  /* Historial de sesiones de estudio: { ts, minutes, steps } */
   if (Array.isArray(raw.studySessions)) {
     base.studySessions = raw.studySessions
       .filter((s) => s && typeof s === 'object' && isFinite(s.ts))
@@ -603,8 +586,7 @@ SMR.progress = {
     tests.history.push({ testId, title, correct, total, pct, mode, date: Date.now() });
     if (tests.history.length > HISTORY_LIMIT) tests.history = tests.history.slice(-HISTORY_LIMIT);
 
-    /* Fase 6C.5: la clave de pregunta es su ID estable; si la pregunta no
-       está en el registro se conserva la clave posicional tal cual. */
+    /* Sin identidad estable se conserva la clave posicional para no perder el fallo. */
     if (!tests.wrong[testId]) tests.wrong[testId] = {};
     answers.forEach((a) => {
       const key = (window.SMR.srs && SMR.srs.idOf(testId, a.origIndex)) || a.origIndex;
@@ -622,8 +604,8 @@ SMR.progress = {
     Object.keys(this.data.tests.wrong).forEach((testId) => {
       const bucket = this.data.tests.wrong[testId] || {};
       Object.keys(bucket).forEach((key) => {
-        /* Fase 6C.5: claves con ID estable se resuelven a su posición
-           de origen; claves numéricas antiguas siguen siendo posicionales. */
+        /* Las claves numéricas heredadas siguen siendo posiciones; las estables
+           se resuelven contra el banco actual. */
         const ref = srsMod && !srsMod.isLegacyKey(key) ? srsMod.resolveSrsKey(key) : null;
         if (ref) refs.push({ testId: ref.testId, qIndex: ref.qIndex, count: bucket[key] });
         else if (/^\d+$/.test(key)) refs.push({ testId, qIndex: Number(key), count: bucket[key] });
@@ -636,14 +618,10 @@ SMR.progress = {
   wrongCount() { return this.wrongRefs().length; },
 
   /* --- Repetición espaciada (SRS) ---
-     Clave "testId:qIndex" → { level, due }.
-     La autoevaluación tras responder ajusta el nivel:
-     0 (No lo sabía) baja, 1 (Dudé) repite nivel, 2 (Lo sabía) sube. */
+     La autoevaluación ajusta el nivel: 0 baja, 1 mantiene y 2 sube. */
 
   scheduleSrs(testId, qIndex, selfRate) {
-    /* Fase 6C.5: se guarda bajo el ID estable de la pregunta, no bajo su
-       posición. Sin registro disponible (srs.js no cargado), fallback
-       posicional para no perder la autoevaluación. */
+    /* Sin srs.js se conserva la valoración con una clave posicional. */
     const key = (window.SMR.srs && SMR.srs.idOf(testId, qIndex)) || `${testId}:${qIndex}`;
     const srs = this.data.tests.srs;
     const current = srs[key] && typeof srs[key].level === 'number' ? srs[key].level : 0;
@@ -669,7 +647,6 @@ SMR.progress = {
     return Object.keys(this.data.tests.srs)
       .filter((key) => this.data.tests.srs[key].due <= now)
       .map((key) => {
-        /* Fase 6C.5: clave estable (ID de pregunta) o antigua (testId:qIndex). */
         const srsMod = window.SMR && window.SMR.srs;
         const ref = srsMod && srsMod.resolveSrsKey(key);
         if (ref) return { key, testId: ref.testId, qIndex: ref.qIndex, level: this.data.tests.srs[key].level, due: this.data.tests.srs[key].due };
@@ -778,7 +755,7 @@ SMR.progress = {
   clear() {
     this.data = defaultProgress();
     SMR.store.remove(PROGRESS_KEY);
-    delete SMR.store.written[PROGRESS_KEY]; /* 8.5.13: sin base, el borrado no se fusiona */
+    delete SMR.store.written[PROGRESS_KEY]; /* sin base, el borrado no se fusiona */
   }
 };
 
@@ -798,13 +775,11 @@ SMR.progress = {
   if (changed) SMR.progress.save();
 })();
 
-/* Fase 6C.5: migración del SRS posicional (testId:qIndex) a ID estable.
-   - Antes de tocar nada guarda una copia del progreso original
-     (clave "progressBackupV3"), una sola vez.
-   - Migra srs y wrong mediante SMR.srs.migrateProgressData (idempotente).
-   - No toca best, last, history, recursos, profile ni curriculum. */
+/* La migración SRS es idempotente y guarda una copia del progreso original
+   en progressBackupV3 antes del primer cambio. Solo convierte srs y wrong;
+   los datos sin correspondencia segura se conservan. */
 (function migrateSrsKeys() {
-  if (!window.SMR || !window.SMR.srs) return; /* srs.js no cargado: no se toca nada */
+  if (!window.SMR || !window.SMR.srs) return;
   const data = SMR.progress.data;
   if (typeof data.v === 'number' && data.v >= SMR.srs.version) return;
   try {
@@ -905,7 +880,6 @@ const HOME_TOOLS = [
   { icon: 'star', title: 'Generador de contraseñas', desc: 'Contraseñas seguras generadas íntegramente en tu navegador.', path: '/herramientas?tool=contrasenas' }
 ];
 
-/* Herramientas y test sugeridos según la categoría del recurso */
 const CATEGORY_TOOLS = {
   Redes: [['subredes', 'Calculadora de subredes'], ['vlsm', 'Reparto VLSM'], ['puertos', 'Tabla de puertos']],
   'Sistemas Operativos': [['conversor', 'Conversor numérico']],
@@ -960,7 +934,6 @@ function timeAgo(ts) {
   return `hace ${Math.floor(months / 12)} años`;
 }
 
-/* Recursos con preguntas falladas (vía relatedResource de cada pregunta) */
 function wrongResourceIds() {
   return SMR.progress.wrongRefs()
     .map((ref) => {
@@ -1274,13 +1247,11 @@ function resourceRow(r) {
     </li>`;
 }
 
-/* Términos del glosario que aparecen en el texto del recurso (derivado, sin inventar datos) */
 function relatedTermsFor(resource) {
   const hay = fold(`${resource.title} ${resource.desc} ${(resource.content || []).join(' ')}`).toLowerCase();
   return D.glossary.filter((t) => hay.includes(fold(t.term).toLowerCase())).slice(0, 6);
 }
 
-/* Recursos que mencionan un término del glosario */
 function resourcesForTerm(term) {
   const needle = fold(term).toLowerCase();
   return D.resources
@@ -1811,7 +1782,6 @@ const currState = {
       : (currProfile && currYears.includes(currProfile.academicYear) ? currProfile.academicYear : (currYears[0] || '')))
 };
 
-/* Lista de comunidades para el selector: la genera el motor de perfil (fuente única) */
 function curriculumList() {
   return SMR.profile.sortedCurriculums();
 }
@@ -1831,10 +1801,8 @@ function currCourse(course) {
 /* Bloques de la ficha que no tienen datos en este registro */
 function currMissingParts(cur) {
   const missing = [];
-  /* 6D.8 (INT-03): la completitud de los contenedores de módulos se
-     consulta a la capa curricular (curriculumIndex), no a la ficha.
-     Los demás bloques (optativas, proyecto, FCT, versión) siguen
-     leyéndose de la fuente: son datos de ficha, no derivables. */
+  /* curriculumIndex determina la completitud de módulos. Los demás bloques
+     se leen de la ficha porque no son derivables de ese índice. */
   const ix = (typeof SMR.curriculumIndex === 'function') ? SMR.curriculumIndex() : null;
   const bucket = ix && ix.byCurriculum ? ix.byCurriculum[cur.id] : null;
   const hasKind = (kind) => Array.isArray(bucket) && bucket.some((m) => m.kind === kind);
@@ -2155,10 +2123,8 @@ function renderCurriculo(root) {
   apply();
 }
 
-/* ---------- Perfil académico del estudiante (fase 5.5) ----------
-   Contexto curricular: comunidad + curso + curso académico.
-   NO toca el progreso: smrhub:progress, estadísticas, historial,
-   favoritos, SRS y rachas siguen siendo solo del progreso. */
+/* ---------- Perfil académico del estudiante ----------
+   La selección curricular es independiente de smrhub:progress. */
 
 const CURR_STATUS_META = {
   VERIFIED: { label: 'Currículo verificado', icon: 'circleCheck', tone: 'ok' },
@@ -2168,7 +2134,6 @@ const CURR_STATUS_META = {
 
 const profileCourseLabel = (c) => (c === 1 ? '1.º SMR' : c === 2 ? '2.º SMR' : 'Sin elegir');
 
-/* Resumen corto del perfil, reutilizado en el dashboard y en «Mi SMR». */
 function profileSummaryHtml(profile, curriculum) {
   if (!profile) return '';
   const status = curriculum ? (CURR_STATUS_META[curriculum.status] || null) : null;
@@ -2262,7 +2227,6 @@ function renderProfileSetup(box) {
     const saved = SMR.profile.save(draft());
     if (!saved) return;
     SMR.modal.close();
-    // Repintar las vistas que derivan del perfil para que reflejen la selección nueva.
     const route = parsePath(currentPath()).id;
     if (route === 'inicio' || route === 'mi-smr' || route === 'curriculo') render();
   });
@@ -2473,13 +2437,11 @@ function renderSettings(root) {
     }
   });
 
-  /* Fase 8.8: comentarios (ver wireFeedback). */
   wireFeedback(root);
 }
 
-/* ---------- Fase 8.8: comentarios (contrato SMR.feedback) ----------
-   Texto del aviso previo. Depende de la sesión, así que se recalcula al
-   cambiar de cuenta en vez de quedarse con el valor del primer pintado. */
+/* El aviso de SMR.feedback depende de la sesión: se recalcula al cambiar
+   de cuenta para no conservar el estado del primer render. */
 function feedbackHintText() {
   const fb = window.SMR.feedback;
   if (!fb) return '';
@@ -2604,7 +2566,6 @@ function buildStudyPlan(minutes) {
     const r = pick();
     if (!r) break;
 
-    /* Explicación: mini-lección o primeros puntos del contenido */
     const lesson = r.lesson || {};
     const keyPoints = lesson.keyPoints && lesson.keyPoints.length
       ? lesson.keyPoints.slice(0, 3)
@@ -2626,7 +2587,6 @@ function buildStudyPlan(minutes) {
     });
   }
 
-  /* Resumen final */
   plan.push({
     type: 'summary',
     title: 'Resumen de la sesión',
@@ -3095,7 +3055,6 @@ function statCard(value, label, hint = '') {
   </div>`;
 }
 
-/* Mini gráfico SVG de los últimos tests (sin librerías) */
 function sparkline(values) {
   if (!values || values.length < 2) return '';
   const w = 220;
@@ -3395,7 +3354,6 @@ function buildNav() {
       `${SMR.icon(route.icon)}<span>${route.title}</span></a>`;
     return li;
   };
-  /* FASE 7: un grupo por area + su lista de enlaces (mismo router). */
   const frag = document.createDocumentFragment();
   NAV_GROUPS.forEach((group) => {
     const p = document.createElement('p');
@@ -3420,9 +3378,7 @@ function setActiveNav(id) {
   setActiveMobileNav(id);
 }
 
-/* ---------- Fase 5.6: navegación inferior en móvil ----------
-   Solo presentación: replica las rutas del sidebar y el botón «Más»
-   abre el drawer existente. No cambia el router ni el estado. */
+/* La navegación móvil reutiliza las rutas y el drawer del sidebar. */
 
 const MOBILE_NAV = ['inicio', 'mi-smr', 'tests', 'recursos'];
 
@@ -3479,7 +3435,6 @@ function currentRouteId() {
   return Object.prototype.hasOwnProperty.call(ROUTES, id) ? id : null;
 }
 
-/* Metadatos de la vista montada: un solo sitio para las ocho etiquetas. */
 function updateMetadata(route, id) {
   const title = titleFor(route);
   const url = SITE_ORIGIN + pathFor(id);
@@ -3554,7 +3509,7 @@ function render() {
         '<p class="empty-text">Vuelve a intentarlo desde el menú o recarga la página.</p>' +
       '</div>';
   } finally {
-    SMR.activeQuery = new URLSearchParams(); // la consulta se consume al renderizar
+    SMR.activeQuery = new URLSearchParams();
   }
   closeDrawer();
   window.scrollTo(0, 0);
@@ -3580,7 +3535,6 @@ SMR.registerSearchEntries = (entries) => {
 function buildSearchIndex() {
   SMR.searchIndex.length = 0;
 
-  /* Secciones */
   SMR.registerSearchEntries(
     Object.entries(ROUTES).map(([id, route]) => ({
       title: route.title,
@@ -3602,7 +3556,6 @@ function buildSearchIndex() {
     }))
   );
 
-  /* Glosario */
   SMR.registerSearchEntries(
     D.glossary.map((t) => ({
       title: t.term,
@@ -3724,7 +3677,6 @@ function renderPalette() {
     return;
   }
 
-  /* Agrupa conservando el orden del índice */
   const groups = [];
   state.items.forEach((item, i) => {
     const name = item.group || 'Resultados';
@@ -3948,7 +3900,6 @@ function init() {
     dom.content.focus();
   });
 
-  /* Ruta pedida desde el 404 y enlaces antiguos (#/vista) → URL limpia. */
   restorePathFrom404();
   canonicalizeUrl();
   wireLinks();
@@ -3957,10 +3908,8 @@ function init() {
   updateThemeButton();
   render();
 
-  /* Fase 8.8: js/cloud-feedback.js se ejecuta DESPUÉS (defer), así que la
-     primera vista se pinta sin SMR.feedback (sección de comentarios y acción
-     de aviso ausentes hasta navegar). Cuando el módulo llega, se repinta la
-     vista actual UNA vez: render() es idempotente y no toca el progreso. */
+  /* cloud-feedback se carga después de app.js (defer). Al publicar su
+     contrato se repinta una vez para habilitar el formulario y los avisos. */
   window.addEventListener('smr:feedbackready', render);
 
   /* El aviso previo de los comentarios depende de la sesión: al cambiar de
@@ -3971,11 +3920,9 @@ function init() {
     if (hint) hint.textContent = feedbackHintText();
   });
 
-  /* PWA: carga sin red y reintento de la cola al reconectar. */
   registerServiceWorker();
   window.addEventListener('online', flushOfflineQueue);
 
-  /* Fase 5.5: contexto académico. Solo se pide si no existe perfil válido. */
   maybeAskProfileSetup();
 }
 

@@ -1,10 +1,5 @@
 'use strict';
 
-/* SMR Hub — herramientas
-   Calculadora de subredes (con explicación paso a paso), tabla de subredes,
-   reparto VLSM, intérprete de permisos POSIX, calculadora de RAID, conversor
-   numérico, conversor de unidades, generador de contraseñas y tabla de puertos.
-   Se conecta a la ruta /herramientas desde app.js. */
 
 window.SMR_TOOLS = (function () {
 
@@ -97,7 +92,6 @@ window.SMR_TOOLS = (function () {
       stepsEl.hidden = open;
     });
 
-    /* Explicación educativa: cada paso con los valores actuales */
     function updateSteps(ip, p, mask, wild, net, bcast) {
       const octets = [mask >>> 24, (mask >>> 16) & 255, (mask >>> 8) & 255, mask & 255];
       const jump = p === 0 ? 256 : 256 - octets[Math.min(3, Math.floor(p / 8))];
@@ -1001,7 +995,6 @@ enlace: 2</textarea></label>
     return section;
   }
 
-  /* ---------- Página de herramientas ---------- */
 
   function render(root) {
     root.replaceChildren(

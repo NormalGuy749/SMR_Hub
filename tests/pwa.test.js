@@ -1,26 +1,9 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — PWA (manifest, service worker, cola offline).
-
-   QUÉ ES: comprueba el contrato estático de la PWA contra el repositorio:
-   - manifest.json con los campos exigidos y con iconos 192/512 REALES
-     (se leen las dimensiones del PNG, no se creen la etiqueta).
-   - index.html enlaza el manifest, declara las metas de iOS y carga la cola
-     antes que app.js.
-   - sw.js precachea EXACTAMENTE lo que arranca la app: la lista se deriva de
-     index.html y del manifest, así que añadir un script sin cachearlo rompe
-     esta suite en vez de romper el offline.
-   - app.js registra el worker solo en contexto seguro y vacía la cola al
-     volver la red, delegando el envío en cloud-progress.
-   - js/offline-store.js funciona sobre una IndexedDB simulada (guardar
-     reemplaza por tipo, leer, limpiar y degradar sin IndexedDB).
-
-   QUÉ NO ES: no simula la red ni el ciclo de vida del worker; eso se verificó
-   en Chromium (install, activate, recarga sin conexión y ruta profunda).
-
-   Ejecutar desde la raíz:  node tests/pwa.test.js
-   ===================================================================== */
+/* Comprueba manifest, assets y cableado del worker en el repositorio;
+   el precache se contrasta con index.html y manifest.json para detectar
+   scripts o iconos omitidos. offline-store usa una IndexedDB simulada.
+   No ejecuta el ciclo de vida del worker ni una red real. */
 
 const fs = require('fs');
 const vm = require('vm');

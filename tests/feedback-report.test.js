@@ -1,24 +1,9 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.8: envío de comentarios y avisos de pregunta (módulo).
-
-   Carga el módulo REAL js/cloud-feedback.js con un mock explícito de
-   Supabase y del contrato de sesión SMR.cloudSession, y comprueba lo que
-   el módulo decide ANTES y DESPUÉS de hablar con el servidor: validación,
-   propiedad (falla cerrado), traducción de errores y ausencia total de
-   reintentos.
-
-   Son pruebas de LÓGICA con mocks. La escritura real (RLS, RPC, límite de
-   frecuencia, aislamiento entre cuentas) se prueba contra PostgreSQL y
-   PostgREST reales en tests/rest-rls-isolation.sh y
-   tests/pg-privileges-lockdown.sh.
-
-   Auto-comprobación del runner:
-     FEEDBACK_SELFTEST=1 node tests/feedback-report.test.js   → exit 1
-
-   Ejecutar desde la raíz:   node tests/feedback-report.test.js
-   ===================================================================== */
+/* Ejecuta cloud-feedback.js real con SDK y cloudSession simulados.
+   Valida payloads, propiedad antes/después del envío y ausencia de reintentos.
+   RLS y RPC reales se prueban en rest-rls-isolation.sh y
+   pg-privileges-lockdown.sh, no en este mock. */
 
 const fs = require('fs');
 const SRC = fs.readFileSync('js/cloud-feedback.js', 'utf8');
@@ -76,7 +61,6 @@ function makeEnv(opts) {
   };
 }
 
-/* ------------------------------------------------------------------ */
 
 (async function main() {
   await caseRun('M1: envío válido de un comentario por RPC, sin user_id en el payload', async () => {
@@ -171,7 +155,6 @@ function makeEnv(opts) {
       assert(s.env.calls.length === 0, s.name + ': ninguna petición al servidor');
       assert(s.env.fb.available() === false, s.name + ': available() es false (la UI avisa)');
     }
-    /* Y con sesión válida sí está disponible. */
     assert(makeEnv().fb.available() === true, 'con sesión y servidor, available() es true');
   });
 
@@ -221,7 +204,7 @@ function makeEnv(opts) {
     const p1 = env.fb.submitFeedback({ category: 'problema', message: 'uno' });
     await new Promise((r) => setTimeout(r, 0));
     assert(env.calls.length === 1, 'la petición está en curso: ' + env.calls.length);
-    env.setOwner('uid-b');          /* otra cuenta entra mientras tanto */
+    env.setOwner('uid-b');
     done({ data: 5, error: null });
     const res = await p1;
     assert(res.ok === false && res.reason === 'changed', 'la respuesta tardía no se atribuye a B: ' + JSON.stringify(res));

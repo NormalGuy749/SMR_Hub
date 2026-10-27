@@ -1,33 +1,11 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Integridad del contenido educativo (auditoría de estabilización).
-
-   QUÉ ES: carga las capas de contenido en el ORDEN REAL de index.html y
-   comprueba la coherencia referencial y la identidad estable:
-     - recursos duplicados, con id inválido o incompletos;
-     - pasos de ruta que apuntan a un recurso inexistente;
-     - relatedResource de preguntas sin destino válido;
-     - referencias huérfanas de las capas de contenido (lecciones sin recurso);
-     - cambios accidentales en los identificadores estables q-<16hex>;
-     - regresión de los validadores derivados y de las funciones de repaso
-       y navegación.
-
-   QUÉ NO ES: no abre un navegador ni ejecuta PostgreSQL. Es una prueba
-   DERIVADA (evalúa los módulos reales sin DOM): la verificación en navegador
-   está documentada aparte en el informe de la fase.
-
-   POLÍTICA DE LA LÍNEA BASE (tests/fixtures/content-baseline.json):
-   las referencias que NO resuelven están registradas con su justificación.
-   Esta suite falla en las DOS direcciones: si aparece una referencia rota
-   nueva, y si una registrada desaparece sin actualizar la línea base. Así el
-   número de avisos no se reduce ocultando referencias. Cuando se publique uno
-   de los recursos pendientes, actualiza la línea base y el informe.
-
-   Ejecutar desde la raíz:            node tests/content-integrity.test.js
-   Regenerar la línea base:           node tests/content-integrity.test.js --update-baseline
-   Auto-verificación del runner:      CONTENT_SELFTEST=1 node tests/content-integrity.test.js → exit 1
-   ===================================================================== */
+/* Carga las capas reales en el orden de index.html, sin navegador ni BD.
+   content-baseline.json registra las referencias pendientes con justificación.
+   La comparación falla si aparece una incidencia o si desaparece una
+   registrada: no se permite reducir avisos ocultando referencias. Publicar
+   un recurso pendiente requiere actualizar y justificar la línea base
+   mediante --update-baseline. */
 
 const fs = require('fs');
 
@@ -222,8 +200,7 @@ check('G1: los 154 identificadores estables q-<16hex> no han cambiado', () => {
 });
 
 check('G2: relatedResource y difficulty NO participan en la identidad (mutación real)', () => {
-  /* Se reescribe el banco: cambia el destino de las recomendaciones y la
-     dificultad declarada. Los IDs deben salir IDÉNTICOS. */
+  /* Mutar metadatos de recomendación y dificultad no debe alterar los IDs. */
   const mutado = load((f, src) => f !== 'js/questions.js' ? src
     : src.replace(/relatedResource:\s*'[^']+'/g, "relatedResource: 'r-inventado'")
       .replace(/difficulty:\s*'(Básica|Intermedia|Avanzada)'/g, "difficulty: 'Básica'"));

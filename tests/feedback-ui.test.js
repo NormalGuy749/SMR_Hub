@@ -1,23 +1,9 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.8: interfaz de comentarios y avisos de pregunta.
-
-   MOCKS EXPLÍCITOS: DOM mínimo (formularios y disparadores), contrato
-   SMR.feedback simulado y un espía que hace FALLAR cualquier intento de
-   hablar con Supabase desde la interfaz. Se extraen las funciones REALES
-   de js/app.js (wireFeedback) y js/tests.js (reportHtml, wireReport).
-
-   Lo que se comprueba aquí es la interfaz: validación visible, estados de
-   envío, mensajes honestos y que no finge un guardado. La escritura real
-   está en tests/feedback-report.test.js (lógica con mocks) y en
-   tests/rest-rls-isolation.sh (PostgREST + PostgreSQL reales).
-
-   Auto-comprobación del runner:
-     FEEDBACK_UI_SELFTEST=1 node tests/feedback-ui.test.js   → exit 1
-
-   Ejecutar desde la raíz:   node tests/feedback-ui.test.js
-   ===================================================================== */
+/* Extrae wireFeedback de app.js y reportHtml/wireReport de tests.js.
+   El DOM y SMR.feedback están simulados; un espía falla si la UI intenta
+   acceder a Supabase. El envío se cubre por separado en feedback-report
+   (mock) y rest-rls-isolation.sh (servidor local real). */
 
 const fs = require('fs');
 const srcApp = fs.readFileSync('js/app.js', 'utf8');
@@ -150,7 +136,6 @@ function makeHarness(opts) {
   };
 }
 
-/* ------------------------------------------------------------------ */
 
 (async function main() {
   await caseRun('U1: el aviso previo del formulario dice la verdad (sesión, sin sesión, sin conexión)', async () => {

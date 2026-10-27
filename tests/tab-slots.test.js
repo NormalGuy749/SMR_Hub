@@ -1,26 +1,11 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.5.12: concurrencia del SLOT VIVO entre PESTAÑAS.
-
-   FIDELIDAD: se cargan DOS instancias del módulo REAL js/cloud-progress.js
-   (una por pestaña) sobre UN localStorage simulado compartido y un bus de
-   eventos 'storage' entregado SOLO a la otra pestaña (semántica real del
-   navegador). Cada pestaña conserva su propio contexto JS: runtime, colas,
-   SMR.progress.data y listeners. Las transiciones de sesión son el código de
-   producción; Supabase es un mock explícito (ninguna prueba de este archivo
-   toca la red): las suites de PostgreSQL y el navegador real cubren lo demás.
-
-   LIMITACIÓN DECLARADA de este arnés: el bus entrega los eventos 'storage'
-   de forma ASÍNCRONA (macrotarea), como el navegador, pero el orden exacto de
-   entrega entre pestañas no se controla. Las pruebas esperan el estado final
-   tras drenar los eventos (flush), no un interleaving concreto.
-
-   Fase E: `node tests/tab-slots.test.js` (10/10) y su auto-verificación
-     TAB_SLOTS_SELFTEST=1 node tests/tab-slots.test.js   → exit 1
-   Para comprobar que la suite detecta el defecto, el módulo bajo prueba puede
-   apuntarse a una copia: SMR_MODULE=/tmp/cloud-progress-prefix.js node tests/tab-slots.test.js
-   ===================================================================== */
+/* Dos instancias reales de cloud-progress comparten almacenamiento
+   simulado; cada una mantiene su runtime, colas, progreso y listeners.
+   El bus entrega storage solo a la otra pestaña y de forma asíncrona,
+   sin controlar el orden exacto. Se espera el estado final tras flush,
+   no un interleaving concreto. Supabase es un mock, sin llamadas de red.
+   SMR_MODULE permite probar otra copia del módulo. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -82,9 +67,8 @@ function makeBus() {
 
 /* ---------- una pestaña = un contexto JS con el módulo real ---------- */
 
-/* 8.6.3: la transición de slots exige EXCLUSIÓN (fail-closed): sin lock ya no
-   se ejecuta. Este arnés aporta un lock FIFO COMPARTIDO por las pestañas del
-   archivo, para que la suite siga ejerciendo la serialización que comprueba. */
+/* El lock FIFO compartido garantiza exclusión sin sustituir el cuerpo
+   de las transiciones de producción. Sin lock no se ejecutarían. */
 function makeSharedLocks() {
   let held = false;
   const queue = [];
@@ -240,14 +224,14 @@ const P = PREFIX;
       [P + 'progress', JSON.stringify(progressWith({ srs: { [QA]: { level: 1, due: 5 } }, completed: { 'r-1': 1 } }))],
       [P + 'progressByOwner:' + UID_A, JSON.stringify({ slot: { progress: progressWith({ srs: { [QA]: { level: 1, due: 5 } } }) }, savedAt: 1, v: 1 })]
     ] });
-    t1.auth(user(UID_A));  /* la pestaña 1 y la 2 quedan en la cuenta A */
+    t1.auth(user(UID_A));
     t2.auth(user(UID_A));
     await flush();
     /* pestaña 1: nueva tarjeta SRS; la pestaña 2 no la ve en memoria */
     t1.progress.data.tests.srs[QB] = { level: 2, due: 9 };
     t1.progress.save();
     await flush();
-    t1.g.SMR.progress.dropSrs('t-t1', 0);   /* borrado real (marca pending) */
+    t1.g.SMR.progress.dropSrs('t-t1', 0);
     await flush();
     assert(t1.marks()[QA] === 'pending', 'el borrado deja la marca pending');
     /* la pestaña 2, con copia desfasada, guarda progreso (save normal) */
@@ -337,7 +321,7 @@ const P = PREFIX;
     t2.auth(user(UID_A));
     await flush();
     t1.auth(user(UID_B));
-    t2.auth(user(UID_B));   /* ambas pestañas procesan el cambio A→B */
+    t2.auth(user(UID_B));
     await flush();
     const snapA = t2.snapshot(UID_A);
     assert(snapA && snapA.slot.progress.resources.completed['r-A'] !== undefined,
@@ -412,13 +396,9 @@ const P = PREFIX;
   })();
   record('pestaña visitante/offline: no adopta ni sobrescribe la custodia de la cuenta');
 
-  /* 8. Escritura rezagada de A mientras B ya es el activo (dos pestañas).
-     Lo que se garantiza aquí: la transición de la otra pestaña no corrompe la
-     custodia de ningún dueño y la pestaña rezagada converge al procesar su
-     propia transición. La escritura de la pestaña rezagada en el slot vivo
-     compartido sigue siendo «último que escribe gana» (limitación conocida,
-     NO corregida en esta fase: la coordenada de la fase es la PROPIEDAD del
-     slot, no el MERGE de dos copias vivas). */
+  /* La transición conserva la custodia y la pestaña rezagada converge
+     cuando procesa su cambio de cuenta. Este arnés no prueba la fusión
+     de dos copias vivas: su progreso usa un save simulado de última escritura. */
   await (async () => {
     const { t1, t2 } = twoTabs({ seed: [
       [P + 'liveOwner', JSON.stringify({ owner: UID_A, v: 1 })],
@@ -429,14 +409,13 @@ const P = PREFIX;
     t1.auth(user(UID_A));
     t2.auth(user(UID_A));
     await flush();
-    t1.auth(user(UID_B));          /* la pestaña 1 pasa a B */
+    t1.auth(user(UID_B));
     await flush();
     const snapA1 = JSON.stringify(t1.snapshot(UID_A));
-    t2.progress.toggleCompleted('r-A-tardio');   /* la pestaña 2 aún cree ser A */
+    t2.progress.toggleCompleted('r-A-tardio');
     await flush();
     assert(t1.marker() === UID_B, 'el propietario activo sigue siendo B');
     assert(JSON.stringify(t1.snapshot(UID_A)) === snapA1, 'la custodia de A no se re-archiva con datos de la pestaña rezagada');
-    /* la pestaña 2 procesa por fin su transición a B */
     t2.auth(user(UID_B));
     await flush();
     assert(t2.marker() === UID_B, 'la pestaña 2 converge al marcador (B)');
@@ -445,7 +424,7 @@ const P = PREFIX;
   })();
   record('transición rezagada de A con B activo: custodia intacta y convergencia al marcador');
 
-  /* 9. Lock RECHAZADO: FAIL-CLOSED (8.6.3) — la transición NO se ejecuta. */
+  /* Lock rechazado: la transición no se ejecuta sin exclusión. */
   await (async () => {
     const brokenLocks = { request: () => Promise.reject(new Error('document not fully active')) };
     const { t1 } = twoTabs({ locks1: brokenLocks, seed: [
@@ -491,7 +470,6 @@ const P = PREFIX;
   })();
   record('perfil, marcas no SRS y progreso intactos; el marcador no viaja en los snapshots');
 
-  /* --- auto-verificación del runner --------------------------------- */
   if (process.env.TAB_SLOTS_SELFTEST === '1') {
     await (async () => { assert(1 === 2, 'auto-verificación: aserción forzada a fallar'); })();
     record('auto-verificación (no debe llegar aquí)');

@@ -1,25 +1,9 @@
 'use strict';
 
-/* SMR Hub — Identificación estable de preguntas y migración del SRS (fase 6C.5)
-   ------------------------------------------------------------------
-   Antes de esta fase, el progreso identificaba cada pregunta por su
-   posición: clave "testId:qIndex" en progress.tests.srs y clave numérica
-   en progress.tests.wrong[testId]. Eso rompía el vínculo con la pregunta
-   si el banco se reordenaba o ampliaba.
-
-   Este módulo:
-   1. Asigna a cada pregunta un ID estable y determinista (hash de
-      contenido, sin aleatoriedad ni timestamps, sin depender de datos
-      curriculares ni de relatedResource).
-   2. Mantiene un registro testId+qIndex <-> ID para toda la aplicación.
-   3. Expone la migración de los datos antiguos (posicionales) al nuevo
-      esquema, de forma idempotente y sin destruir nada:
-      - Las entradas resolubles se reasignan al ID estable.
-      - Las entradas NO resolubles se conservan en tests.srsLegacy
-        (SRS) o con su clave numérica original (wrong): nunca se
-        inventan correspondencias ni se descartan datos.
-   No toca: best, last, history, progress, profile, curriculum,
-   categorías, orden de preguntas ni contenido educativo. */
+/* La identidad por contenido conserva el vínculo del progreso al reordenar
+   el banco. El registro resuelve posiciones actuales e IDs estables.
+   La migración posicional es idempotente: conserva entradas sin correspondencia
+   segura en srsLegacy o con su clave wrong original, sin inventar preguntas. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
@@ -61,8 +45,8 @@
   /* ---------- Registro testId+qIndex <-> ID ---------- */
 
   const registry = {
-    byPos: new Map(), /* "testId:qIndex" -> id */
-    byId: new Map()   /* id -> { testId, qIndex, q } */
+    byPos: new Map(),
+    byId: new Map()
   };
 
   function buildIndex() {
@@ -116,7 +100,6 @@
     return entry ? { testId: entry.testId, qIndex: entry.qIndex } : null;
   }
 
-  /* ID estable para una posición actual del banco (o null). */
   function idOf(testId, qIndex) {
     return registry.byPos.get(String(testId) + ':' + Number(qIndex)) || null;
   }
@@ -125,15 +108,10 @@
 
   const SRS_KEY_VERSION = 4;
 
-  /* Reglas (requisitos fase 6C.5):
-     1. Los datos antiguos no desaparecen: antes del primer cambio la app
-        guarda una copia completa del progreso original (backup en
-        localStorage, clave "smrhub:progressBackupV3"); lo no resoluble
-        queda en srsLegacy o con su clave original.
-     2. Una entrada antigua "testId:qIndex" se resuelve SOLO si ese test
-        existe y ese qIndex apunta a una pregunta actual del banco; si no,
-        NO se reasigna.
-     3. Idempotente: dos ejecuciones no duplican ni alteran datos. */
+  /* El llamante respalda el progreso original en progressBackupV3.
+     Una clave posicional solo se convierte si el test y la pregunta existen
+     en el banco actual. Lo no resoluble se conserva y repetir la migración
+     no duplica ni altera datos. */
   function migrateProgressData(data, now) {
     now = typeof now === 'number' ? now : Date.now();
     const result = { changed: false, srsMigrated: 0, srsKept: 0, wrongMigrated: 0, wrongKept: 0, srsLegacy: 0 };
@@ -152,7 +130,7 @@
       && typeof item.due === 'number' && isFinite(item.due);
 
     Object.keys(tests.srs).forEach((key) => {
-      if (isStableKey(key)) { /* clave ya estable: nada que hacer */ return; }
+      if (isStableKey(key)) { return; }
       if (!isLegacyKey(key)) {
         /* Ni antigua ni ID estable: basura no identificable. Se conserva
            en srsLegacy sin reasignar. */
@@ -194,7 +172,7 @@
       Object.keys(bucket).forEach((key) => {
         const count = bucket[key];
         if (typeof count !== 'number' || !isFinite(count)) return;
-        if (!/^\d+$/.test(key)) { /* ya es ID estable */ return; }
+        if (!/^\d+$/.test(key)) { return; }
         const id = registry.byPos.get(testId + ':' + Number(key));
         if (!id) {
           /* Pregunta no presente en el banco actual: se conserva la

@@ -1,23 +1,8 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.6.2: logout seguro y transición de sesión (js/auth.js).
-
-   FIDELIDAD: se carga el módulo REAL js/auth.js dentro de un entorno
-   simulado (window, DOM mínimo, widget en un footer de mentira,
-   SMR.modal, SMR.cloud.auth). Supabase es un mock explícito: son pruebas
-   de LÓGICA con mocks. NO demuestran el comportamiento real de GoTrue
-   (el del SDK v2.117.3 se verificó aparte contra el código fuente:
-   scope 'local' hace POST /logout?scope=local, y con fallo de red limpia
-   la sesión y emite SIGNED_OUT igualmente).
-
-   Sobre la transición de slots al modo visitante (cloud-progress.js) y
-   el reset del perfil (cloud-profile.js) tras smr:authchange=null no se
-   duplica nada aquí: la cubren slot-owner, h1-race, tab-slots, tab-merge
-   y srs-sync, que provocan exactamente esos eventos.
-
-   Ejecutar desde la raíz:   node tests/auth-logout.test.js
-   ===================================================================== */
+/* Ejecuta auth.js real con DOM, modal y SDK simulados. No prueba GoTrue.
+   El mock reproduce SIGNED_OUT incluso tras error de red del SDK; el cambio
+   de slots y el aislamiento de progreso se cubren en las suites de ownership. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -92,7 +77,7 @@ function makeEnv(o) {
   };
   /* El selector de '¿hay un modal update-password abierto?' se abre con el modal vivo */
   doc.querySelector = (sel) => {
-    if (sel === '.auth-nav-item') return null; /* injectWidget siempre inyecta */
+    if (sel === '.auth-nav-item') return null;
     const m = /data-auth-form="([^"]+)"/.exec(sel || '');
     return m && modal.current && modal.current.body._html.includes('data-auth-form="' + m[1] + '"') ? fakeEl(sel) : null;
   };
@@ -109,7 +94,6 @@ function makeEnv(o) {
     win, win, doc, URLSearchParams, FakeEvent, FakeFormData);
   return { modal, auth, calls, events, soArgs, footer, SMR: win.SMR, nullAnnouncements: () => events.filter((e) => e.type === 'smr:authchange' && e.detail && !e.detail.user).length };}
 
-/* accede al botón de logout del widget inyectado */
 const logoutBtn = (env) => env.footer.appended.length
   ? env.footer.appended[0].querySelector('[data-auth-logout]')
   : null;
@@ -166,7 +150,7 @@ async function signIn(env) {
     await env.SMR.auth.signOut();
     await env.auth.emit('SIGNED_OUT', null);
     await flush();
-    await env.SMR.auth.signOut(); /* reenvío tardío o doble click */
+    await env.SMR.auth.signOut();
     await env.auth.emit('SIGNED_OUT', null);
     await flush();
     assert(env.soArgs.length === 2, 'el SDK se llama las dos veces (idempotente en v2), sin estado en conflicto');
@@ -180,7 +164,7 @@ async function signIn(env) {
     await flush();
     await signIn(env);
     const btn = logoutBtn(env);
-    const p = btn.fire('click'); /* el handler real del widget */
+    const p = btn.fire('click');
     await p;
     assert(btn.disabled === false, 'el widget re-habilita el botón si el cierre falló sin evento');
     /* el SDK real también emitiría SIGNED_OUT tras limpiar la sesión local (verificado);
@@ -240,7 +224,6 @@ async function signIn(env) {
   })();
   record('SIGNED_OUT no cierra modales no relacionados con el flujo de recuperación');
 
-  /* --- auto-verificación del runner --------------------------------- */
   if (process.env.AUTH_LOGOUT_SELFTEST === '1') {
     await (async () => { assert(1 === 2, 'auto-verificación: aserción forzada a fallar'); })();
     record('auto-verificación (no debe llegar aquí)');

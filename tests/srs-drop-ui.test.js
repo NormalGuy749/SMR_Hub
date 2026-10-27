@@ -1,17 +1,8 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.5.9: pruebas de la interfaz de borrado SRS.
-   MOCKS EXPLÍCITOS: DOM mínimo (wrapper/botones/disparadores), SMR.srs
-   REAL (js/srs.js por New Function), SMR.progress con espía y
-   SMR.modal simulado. NINGUNA prueba toca Supabase ni una BD; el
-   borrado autenticado real está cubierto por srs-delete / pg-srs-delete
-   / srs-sync / h1-race.
-
-   Auto-comprobación del runner (requisito: la suite puede fallar y
-   propaga exit code != 0):
-     SRS_DROP_SELFTEST=1 node tests/srs-drop-ui.test.js   → exit 1
-   ===================================================================== */
+/* Prueba los controles reales de borrado con DOM y modal simulados,
+   srs.js real y un espía de progreso. No ejecuta Supabase ni PostgreSQL;
+   el contrato cloud se cubre por separado en srs-delete y pg-srs-delete.sh. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -193,7 +184,6 @@ function makeHarness(opts) {
   return { g, fn, progressMock, srsLocal, ID, cloudCalls: () => cloudCalls, srcTests, snippets };
 }
 
-/* ------------------------------------------------------------------ */
 
 (async function main() {
   /* --- 1. la acción aparece solo para tarjetas existentes ------------ */
@@ -379,7 +369,6 @@ function makeHarness(opts) {
   })();
   record('R10: la UI solo confirma y llama al contrato existente (sin tombstones ni propietario)');
 
-  /* --- auto-verificación del runner (requisito 10) ------------------- */
   if (process.env.SRS_DROP_SELFTEST === '1') {
     await (async () => {
       assert(1 === 2, 'auto-verificación: aserción forzada a fallar');

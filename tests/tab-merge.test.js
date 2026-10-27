@@ -1,35 +1,11 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.5.13: FUSIÓN de escrituras del slot vivo entre PESTAÑAS
-   y comportamiento del lock de transición.
-
-   FIDELIDAD:
-   - Las primitivas de fusión NO se reimplementan: se EXTRAEN del código real
-     (js/app.js): el objeto SMR.store (get/set/remove/written/writeMerged), las
-     constantes de límite y los helpers (deepEqual, slotMergeArray, slotMergeObject,
-     slotMergeValue, slotApply), además
-     del par `otherSlot()` + `save()` reales del objeto de progreso. Cada
-     pestaña evalúa su propia copia (su propio `written`), como en el navegador.
-   - Se carga una instancia REAL de js/cloud-progress.js por pestaña sobre un
-     localStorage simulado compartido y un bus 'storage' que solo avisa a la
-     otra pestaña. Supabase es un mock explícito: esta suite no toca la red.
-   - No hay fusión con la nube en juego aquí: eso lo cubren las suites de
-     PostgreSQL y la verificación en navegador real.
-
-   LIMITACIÓN DECLARADA: este arnés es un solo proceso. Puede reproducir el
-   ORDEN de las escrituras (incluida una escritura obsoleta posterior), pero no
-   el interleaving real entre dos procesos del navegador a nivel de setItem.
-   Las pruebas del lock verifican el orden y el estado final, no una carrera
-   física entre procesos.
-
-   Fase E: node tests/tab-merge.test.js            → 13/13
-     auto-verificación del runner:  TAB_MERGE_SELFTEST=1 node tests/tab-merge.test.js → exit 1
-     módulo pre-8.5.13 (demuestra que la suite detecta el defecto):
-       sed 's/SMR.store.writeMerged(PROGRESS_KEY, this.data, this.otherSlot())/SMR.store.set(PROGRESS_KEY, this.data)/' \
-         js/app.js > /tmp/app-prefix.js
-       SMR_APP=/tmp/app-prefix.js node tests/tab-merge.test.js
-   ===================================================================== */
+/* Cada pestaña ejecuta store, save y las primitivas de fusión extraídas
+   de app.js, con su propia base written. cloud-progress también es real;
+   almacenamiento, eventos y Supabase están simulados. storage solo avisa
+   a la otra instancia y no se prueba el merge del servidor.
+   Un proceso permite controlar escrituras obsoletas y el estado final,
+   pero no una carrera física de setItem entre procesos del navegador. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -49,7 +25,6 @@ function slice(from, to) {
   return srcApp.slice(a, b);
 }
 
-/* código REAL de app.js, sin reescribir */
 const STORE_SRC = slice("const STORE_PREFIX = 'smrhub:';", '/* ---------- Iconos (');
 const MERGE_SRC = slice('const ACTIVITY_LIMIT = 40;', 'function dayKey(');
 const SAVE_SRC = slice('  otherSlot() { return SMR.store.get', '  /* --- Recursos --- */');
@@ -171,9 +146,8 @@ function makeTab(bus, opts) {
   const g = {
     console: { log() {}, warn() {}, error() {}, info() {} },
     localStorage: lsView,
-    /* 8.6.3: la transición de slots exige EXCLUSIÓN (fail-closed): sin lock ya
-       no se ejecuta. SHARED_LOCKS es un FIFO compartido por las pestañas del
-       archivo, para que la suite siga ejerciendo la serialización. */
+    /* El FIFO compartido aporta la exclusión exigida por las transiciones
+       sin sustituir la lógica del módulo que archiva y restaura el slot. */
     navigator: o.locks ? { locks: o.locks } : { locks: SHARED_LOCKS },
     addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
     dispatchEvent(ev) { (listeners[ev.type] || []).slice().forEach((fn) => fn(ev)); return true; },
@@ -291,7 +265,7 @@ function seedAccount(bus, uid, progressObj) {
     t2.auth(user(UID_A));
     await flush();
     assert(t1.slotCompleted().indexOf('r-1') !== -1, 'la cuenta arranca con su slot: ' + JSON.stringify(t1.slotCompleted()));
-    t1.progress.toggleCompleted('r-2');          /* pestaña 1 escribe */
+    t1.progress.toggleCompleted('r-2');
     await flush();
     t2.progress.toggleCompleted('r-3');          /* pestaña 2, copia leída ANTES, escribe después */
     await flush();
@@ -329,7 +303,6 @@ function seedAccount(bus, uid, progressObj) {
     const hist = (bus.ls.get(P + 'progress') && JSON.parse(bus.ls.get(P + 'progress')).tests.history) || [];
     assert(hist.length === 2, 'las dos entradas de historial conviven: ' + JSON.stringify(hist));
     assert(hist[0].ts === 100 && hist[1].ts === 200, 'ordenado por ts');
-    /* límite real (HISTORY_LIMIT = 60 extraído de app.js) */
     const many = [];
     for (let i = 1; i <= 60; i++) many.push({ ts: i, mode: 'test', testId: 't-t1', score: i });
     bus.seed(P + 'progress', JSON.stringify(progressWith({ history: many })));
@@ -359,7 +332,7 @@ function seedAccount(bus, uid, progressObj) {
     t1.auth(user(UID_A));
     t2.auth(user(UID_A));
     await flush();
-    t1.progress.toggleCompleted('r-1');   /* la pestaña 1 DESmarca r-1 */
+    t1.progress.toggleCompleted('r-1');
     await flush();
     t2.progress.toggleCompleted('r-3');   /* la pestaña 2 marca r-3 (copia antigua) */
     await flush();
@@ -377,9 +350,9 @@ function seedAccount(bus, uid, progressObj) {
     t1.auth(user(UID_A));
     t2.auth(user(UID_A));
     await flush();
-    t1.g.SMR.progress.dropSrs('t-t1', 0);                  /* borra QA (marca pending) */
+    t1.g.SMR.progress.dropSrs('t-t1', 0);
     await flush();
-    t2.progress.data.tests.srs[QB] = { level: 2, due: 9 }; /* tarjeta nueva en la otra pestaña */
+    t2.progress.data.tests.srs[QB] = { level: 2, due: 9 };
     t2.progress.save();
     await flush();
     const keys = t1.slotSrs();
@@ -458,7 +431,7 @@ function seedAccount(bus, uid, progressObj) {
     t1.auth(user(UID_A));
     t2.auth(user(UID_A));
     await flush();
-    t2.progress.toggleCompleted('r-old');  /* la pestaña 2 escribe primero */
+    t2.progress.toggleCompleted('r-old');
     await flush();
     t1.progress.toggleCompleted('r-new');  /* y la 1 después, con copia ya vieja */
     await flush();
@@ -470,7 +443,6 @@ function seedAccount(bus, uid, progressObj) {
     assert(Object.keys(afterWrites.resources.completed).length === 3, 'las tres marcas conviven: ' + JSON.stringify(Object.keys(afterWrites.resources.completed)));
     assert(afterWrites.tests.best['t-t1'] === 70, 'la mejor puntuación de la pestaña 1 sobrevive');
     assert(afterWrites.studyMinutes === 15, 'los minutos de la pestaña 2 sobreviven');
-    /* recarga de las dos pestañas */
     const r = reload(bus);
     r.t1.auth(user(UID_A));
     r.t2.auth(user(UID_A));
@@ -504,7 +476,7 @@ function seedAccount(bus, uid, progressObj) {
   await (async () => {
     const bus = makeBus();
     const legacy = progressWith({ srsLegacy: { 't-t1:0': { level: 1, due: 3 } } });
-    legacy.best = { 't-t1': 40 };                 /* formato anterior */
+    legacy.best = { 't-t1': 40 };
     legacy.extraDesconocido = { a: 1 };           /* clave que este código no conoce */
     seedAccount(bus, UID_A, legacy);
     const { t1, t2 } = reload(bus);
@@ -538,8 +510,7 @@ function seedAccount(bus, uid, progressObj) {
     assert(t1.marker() === UID_A && t2.marker() === UID_A, 'el marcador queda en la cuenta que entra');
     const snapG = t1.snapshot('__guest__');
     assert(snapG && snapG.slot.progress.resources.completed['r-vis'] !== undefined, 'el contenido del visitante queda custodiado');
-    /* política 8.3 vigente: el dispositivo que inicia sesión ADOPTA el
-       contenido del visitante (no se pierde ni se duplica) */
+    /* La primera cuenta adopta el progreso visitante sin perderlo ni duplicarlo. */
     const liveIds = t1.live('progress') ? Object.keys(t1.live('progress').resources.completed) : [];
     assert(liveIds.indexOf('r-vis') !== -1, 'el contenido del visitante se adopta en el slot vivo: ' + JSON.stringify(liveIds));
     assert(t1.snapshot('__guest__').slot.progress.resources.completed['r-vis'] !== undefined, 'y además queda custodiado');
@@ -579,7 +550,7 @@ function seedAccount(bus, uid, progressObj) {
   })();
   record('dos transiciones concurrentes: serializadas por el lock, sin mezclar propietarios');
 
-  /* 12. LOCK RECHAZADO: FAIL-CLOSED (8.6.3) — sin exclusión NO se ejecuta. */
+  /* Lock rechazado: la transición no se ejecuta sin exclusión. */
   await (async () => {
     const rejected = makeLocks({ reject: 'documento no activo (bfcache)' });
     const bus = makeBus();
@@ -597,8 +568,7 @@ function seedAccount(bus, uid, progressObj) {
   })();
   record('lock rechazado: fail-closed — sin exclusión no se ejecuta y no se pierde nada');
 
-  /* 13. ERROR SÍNCRONO AL PEDIR EL LOCK: no escapa y tampoco se ejecuta sin
-     exclusión (FAIL-CLOSED, 8.6.3). */
+  /* Un error síncrono al pedir el lock tampoco autoriza la transición. */
   await (async () => {
     const thrower = makeLocks({ rejectSync: true });
     const bus = makeBus();
@@ -616,7 +586,6 @@ function seedAccount(bus, uid, progressObj) {
   })();
   record('error síncrono al pedir el lock: no escapa al manejador y no se ejecuta sin exclusión');
 
-  /* --- auto-verificación del runner --------------------------------- */
   if (process.env.TAB_MERGE_SELFTEST === '1') {
     await (async () => { assert(1 === 2, 'auto-verificación: aserción forzada a fallar'); })();
     record('auto-verificación (no debe llegar aquí)');

@@ -1,21 +1,8 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.5.11: propiedad del slot vivo (defecto D-3 de 8.5.10).
-
-   FIDELIDAD: aquí NO se extraen funciones sueltas; se carga el módulo REAL
-   js/cloud-progress.js entero dentro de un entorno simulado
-   (localStorage/DOM/Supabase de mentira), de modo que la transición de
-   slots y el manejador smr:authchange son el código de producción. Sin
-   Web Locks el lock de transición corre síncrono (decisión del propio
-   módulo), así que las transiciones son deterministas.
-
-   Supabase es un mock explícito: NINGUNA prueba de este archivo toca la
-   nube real; las suites de PostgreSQL y de navegador cubren lo demás.
-
-   Auto-verificación del runner:
-     SLOT_OWNER_SELFTEST=1 node tests/slot-owner.test.js   → exit 1
-   ===================================================================== */
+/* Carga cloud-progress.js completo: transiciones y authchange son reales,
+   con almacenamiento, DOM y SDK simulados. El lock del arnés concede siempre
+   para aislar la mecánica de propiedad del slot; no prueba concurrencia real. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -95,9 +82,8 @@ function makeEnv(opts) {
       get length() { return ls.size; },
       key: (i) => [...ls.keys()][i] === undefined ? null : [...ls.keys()][i]
     },
-    /* 8.6.3: la transición de slots exige EXCLUSIÓN (fail-closed). Este arnés
-       es de UNA pestaña: un lock que concede siempre mantiene lo que la suite
-       comprueba (la mecánica de slots), ahora por la vía CON exclusión. */
+    /* El arnés de una pestaña concede siempre el lock requerido; la
+       concurrencia entre pestañas se cubre en tab-slots y tab-merge. */
     navigator: { locks: { request: (name, cb) => Promise.resolve().then(cb) } },
     addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
     dispatchEvent(ev) { (listeners[ev.type] || []).slice().forEach((fn) => fn(ev)); return true; },
@@ -224,7 +210,7 @@ function flush(n) {
   })();
   record('A→B→A: cada estado se archiva bajo su dueño, sin mezcla');
 
-  /* --- 4. custodia del contenido de visitante (comportamiento previo) --- */
+  /* Custodia del progreso visitante. */
   await (async () => {
     const env = makeEnv({
       seed: {
@@ -252,7 +238,7 @@ function flush(n) {
         snapshots: { 'uid-A': { progress: progressWith({ srs: {} }) } }
       }
     });
-    env.auth(user('uid-A'));   /* primer arranque tras actualizar el código */
+    env.auth(user('uid-A'));
     await flush();
     assert(env.marker() === 'uid-A', 'tras el primer arranque el marcador queda fijado');
     /* el primer arranque de un perfil heredado conserva la custodia previa:
@@ -335,13 +321,13 @@ function flush(n) {
         snapshots: { 'uid-A': { progress: progressWith({ srs: {} }) }, 'uid-B': { progress: progressWith({ srs: {} }) } }
       }
     });
-    env.auth(user('uid-A'));         /* el pull de A queda EN VUELO */
+    env.auth(user('uid-A'));
     await flush();
-    env.auth(user('uid-B'));         /* se activa B antes de que responda A */
+    env.auth(user('uid-B'));
     await flush();
     assert(env.marker() === 'uid-B', 'el propietario activo es B');
     const heldCount = env.held.length;
-    env.held.splice(0).forEach((done) => done());  /* llega la respuesta tardía de A */
+    env.held.splice(0).forEach((done) => done());
     await flush(6);
     const ids = (env.live('progress').tests.history || []).map((h) => h.testId);
     assert(env.marker() === 'uid-B', 'el propietario no cambia con la respuesta tardía');
@@ -373,7 +359,6 @@ function flush(n) {
   })();
   record('datos no SRS (perfil, marcas de limpieza) intactos y marcador fuera de los snapshots');
 
-  /* --- auto-verificación del runner --------------------------------- */
   if (process.env.SLOT_OWNER_SELFTEST === '1') {
     await (async () => { assert(1 === 2, 'auto-verificación: aserción forzada a fallar'); })();
     record('auto-verificación (no debe llegar aquí)');

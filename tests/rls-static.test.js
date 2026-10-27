@@ -1,20 +1,8 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.7: invariantes de seguridad, ESTÁTICO.
-
-   QUÉ ES: una red de regresión sobre el TEXTO de las migraciones y del
-   cliente. No ejecuta PostgreSQL: comprueba que las restricciones
-   esperadas siguen escritas, para que una migración futura no las relaje
-   en silencio (quitar una policy, volver una a `true`, abrir EXECUTE a
-   anon, o convertir una función en SECURITY DEFINER sin search_path).
-
-   QUÉ NO ES: la validación real. Esa está en:
-     - tests/rest-rls-isolation.sh      (PostgREST + GoTrue + PostgreSQL)
-     - tests/pg-privileges-lockdown.sh  (catálogo real de PostgreSQL)
-
-   Ejecutar desde la raíz:   node tests/rls-static.test.js
-   ===================================================================== */
+/* Comprueba invariantes en el texto de migraciones y cliente; no ejecuta
+   PostgreSQL. El aislamiento real por REST se cubre en rest-rls-isolation.sh
+   y los privilegios del catálogo en pg-privileges-lockdown.sh. */
 
 const fs = require('fs');
 const path = require('path');
@@ -70,9 +58,8 @@ const EXPECTED = {
   wrong_answers: 'S,I,U,D', srs_cards: 'S,I,U,D', case_solutions: 'S,I,U,D', favorites: 'S,I,U,D',
   test_attempts: 'S,I', wrong_answer_events: 'S,I', streak_days: 'S,I', study_sessions: 'S,I',
   activity_events: 'S,I',
-  /* 00009 (fase 8.8): feedback y question_reports pierden el INSERT directo:
-     la ÚNICA vía de alta es la RPC, que es donde viven la validación, el
-     sellado de user_id/processing_status y el límite de frecuencia. */
+  /* La RPC es la única vía de alta de feedback y avisos: valida el payload,
+     sella user_id/processing_status y limita la frecuencia. */
   feedback: 'S', question_reports: 'S', entitlements: 'S',
   progress_sync_chunks: 'S,I,D'
 };
@@ -180,8 +167,7 @@ check('la RPC de chunks acota las tablas permitidas y rechaza el resto', () => {
 });
 
 check('SECURITY DEFINER: allow-list fija, search_path fijo y EXECUTE acotado', () => {
-  /* Allow-list, no "cuenta de funciones": cualquier DEFINER NUEVO rompe este
-     test y obliga a justificarlo aquí. 00009 añade las dos RPC de 8.8. */
+  /* Cualquier SECURITY DEFINER nuevo exige justificarlo en esta allow-list. */
   const ALLOWED = 'handle_new_user,submit_feedback,submit_question_report';
   const names = FUNCS.filter((f) => /security definer/i.test(f.opts));
   assert(names.map((f) => f.name).sort().join(',') === ALLOWED,
@@ -310,7 +296,6 @@ check('invariantes de dominio intactos: marcador {owner,v:1}, sin seq, formato S
   assert(!/studentProfile/i.test(sql), 'el esquema NO debe copiar claves locales de la app (SMR_DATA/studentProfile)');
 });
 
-/* ---------- auto-verificación del runner ---------- */
 if (process.env.RLS_STATIC_SELFTEST === '1') {
   check('auto-verificación (debe fallar)', () => assert(1 === 2, 'auto-verificación: aserción forzada a fallar'));
 }

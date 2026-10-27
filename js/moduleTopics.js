@@ -1,72 +1,23 @@
 'use strict';
 
-/* SMR Hub — Mapping curricular topic → módulo + equivalencias (fase 6D.6)
-   ------------------------------------------------------------------
-   Capa DERIVADA y de solo lectura. Dos subcapas separadas:
-
-   1) moduleLinks  — ¿qué módulos curriculares enseñan este topic?
-   2) equivalencias — qué instancias de distintos territorios son
-      educativamente comparables (NUNCA fusionan identidad técnica).
-
-   ESTRUCTURA DE EVIDENCIA (4 niveles, prioridad descendente):
-   A. Contenidos oficiales del módulo (RD 1691/2007 Anexo I y
-      distribuciones autonómicas aplicables; referenciados en
-      SMR_DATA.curriculums[].normative/sources de la fase 4).
-   B. Denominación oficial del módulo en el título.
-   C. Referencias cruzadas entre denominaciones oficiales.
-   D. Capa didáctica de SMR Hub (questionTopics/contentTopics):
-      AUXILIAR, nunca autoridad. La relación curricular tiene
-      justificación propia (regla 6 del encargo).
-
-   La tabla está CURADA POR CÓDIGO: un mismo código oficial (0225,
-   0226…) designa el mismo módulo educativo con denominación y
-   contenidos oficiales comunes; la EXPANSIÓN a instancias se hace en
-   carga usando las identidades territoriales de curriculum.js
-   (curriculumId:c1|c2|cx:code). La identidad sigue siendo territorial:
-   NO existe "0225 universal". Regla 10: el curso de modules1/modules2
-   viene del contenedor (hecho en curriculum.js); electives/project
-   conservan su curso propio o cx.
-
-   Confianza: high (el topic está claramente incluido en los
-   contenidos/denominación oficiales), medium (relación razonable con
-   interpretación editorial razonada), low (posible pero débil),
-   review (dudosa: NO se activa y NO se tabula; la ausencia en la
-   tabla es el estado review).
-   Rol: core (el módulo existe para enseñar esto), support (aporta de
-   forma parcial/contextual), context (contexto: optatividad y
-   módulos transversales LO 3/2022).
-
-   DECISIÓN EDITORIAL — códigos SIN links (hueco documentado, no
-   mapping falso):
-   - 0228 Aplicaciones web: la taxonomía real de SMR Hub (6D.3, sobre
-     contenido real) no tiene topics de programación web; inventarlos
-     está prohibido (6D.3). Sin mapping.
-   - 1708/1708190 Sostenibilidad: ningún topic cubre sostenibilidad ni
-     ahorro energético. unmappedTopicCandidate futuro.
-   - 1709/1710 Itinerario de empleabilidad, 0156 Inglés, A996/A997
-     Tutoría: sin topics canónicos aplicables.
-   - Electivas (CMO, CVOPM190, PA02XX, opt-*): contenido libre/no
-     especificado en las fuentes; sin mapping y FUERA de equivalencias.
-   - Contenido curricular sin topic canónico (documentado, no
-     inventado): DHCP (0225/0227), bases de datos y ERP/CRM (0223),
-     servidores web/FTP/correo (0227), directory services (0224),
-     programación web (0228).
-
-   EQUIVALENCIAS (regla 8): mismo código NO implica equivalencia; se
-   exige misma denominación/contenidos oficiales. Modelo:
-   - GRUPOS: instancias con mismo código y mismo segmento de curso
-     (c1|c2|cx) y kind modules1/modules2/project → equivalencia
-     'strong' (par a par, expandida en lectura). Electivas excluidas.
-   - REGLAS PARCIALES CURADAS (bidireccionales, 'partial'/medium):
-     mismo módulo oficial con cambio de curso entre territorios o con
-     código autonómico distinto (Valencia). NO transitivas.
-   - 'exact' no se usa: no hay dos territorios con idéntico horario de
-     implantación (documentado en la auditoría).
-
-   NO toca: data.js, topics.js, questionTopics.js, contentTopics.js,
-   content.js, questions.js, tests.js, srs.js, profile.js, app.js,
-   localStorage, progress, SRS, moduleLinks de topics.js (sigue
-   reservado; este módulo mantiene SU PROPIA capa de moduleLinks). */
+/* Relaciones curriculares y equivalencias derivadas, de solo lectura.
+   La evidencia se prioriza así: contenidos oficiales (RD 1691/2007 Anexo I
+   y normativa territorial de curriculums[].normative/sources), denominación
+   oficial, referencias entre denominaciones y, solo como apoyo, contenido
+   didáctico de SMR Hub. La relación curricular necesita evidencia propia.
+   La tabla se cura por código y se expande a instancias territoriales
+   (curriculumId:c1|c2|cx:code): compartir código no fusiona identidades.
+   high indica inclusión oficial clara; medium, interpretación razonada; low,
+   relación débil; review no se activa ni se tabula. Roles: core, support, context.
+   Huecos deliberados: 0228 y 1708/1708190 carecen de topics aplicables;
+   1709/1710, 0156 y A996/A997 tampoco tienen correspondencia canónica.
+   Las electivas no tienen contenido oficial especificado y se excluyen
+   del mapping y de las equivalencias. Tampoco se inventan topics para DHCP,
+   ERP/CRM, bases de datos, servicios web/FTP/correo o directorio.
+   strong exige mismo módulo oficial y segmento de curso; partial recoge
+   cambios de curso o código autonómico (Valencia), sin transitividad.
+   No se declara exact porque los horarios de implantación difieren.
+   Esta capa mantiene sus propios moduleLinks; el campo de topics.js sigue reservado. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
@@ -74,7 +25,7 @@
 
   const MODULE_TOPICS_VERSION = 1;
 
-  /* 6D.8 (INT-02): lookup vacío compartido para el caso sin dependencia. */
+  /* Lookup inmutable compartido para el caso sin dependencia. */
   const EMPTY_LOOKUP = Object.freeze(Object.create(null));
 
   /* ---------- Tabla curada POR CÓDIGO: topic → módulo ----------
@@ -173,9 +124,7 @@
     ] }
   ];
 
-  /* Códigos oficiales de referencia (coherencia con 6D.1). Sirve para
-     detectar deriva de datos: si cambia el número de instancias de un
-     código, el validador avisa. */
+  /* El número esperado de instancias por código permite detectar deriva de datos. */
   const EXPECTED_INSTANCES = {
     '0221': 14, '0222': 14, '0223': 14, '0224': 14, '0225': 14,
     '0226': 14, '0227': 14, '1713': 25, '1664': 13, '1664190': 1,
@@ -215,7 +164,7 @@
     const tableByCode = new Map(CODE_LINKS.map((c) => [c.code, c]));
     const seenCodes = new Set();
     const links = [];
-    /* 6D.8 (INT-02): lookups internos sin prototipo; congelados al exponer. */
+    /* Los lookups no tienen prototipo y se congelan al exponerlos. */
     const byModuleId = Object.create(null);
     const byTopicId = Object.create(null);
     const instancesPerCode = new Map();
@@ -254,11 +203,9 @@
       seenCodes.add(String(m.code));
     });
 
-    /* Códigos de la tabla sin instancias reales (deriva de datos). */
     CODE_LINKS.forEach((c) => {
       if (!seenCodes.has(c.code)) problems.push({ code: 'unused-code', code: c.code, detail: 'la tabla enlaza el código ' + c.code + ' pero no existe en el índice curricular' });
     });
-    /* Deriva de instancias esperadas (6D.1). */
     Object.keys(EXPECTED_INSTANCES).forEach((code) => {
       const got = instancesPerCode.get(code) || 0;
       if (got !== EXPECTED_INSTANCES[code]) {
@@ -302,7 +249,6 @@
     return entries ? entries.map((e) => e.moduleId).sort() : [];
   }
 
-  /* Topic principal = el primero declarado (determinista). */
   function topicOfModule(moduleId) {
     const entries = ensureIndex().byModuleId[String(moduleId)];
     return entries && entries.length ? entries[0].topicId : null;
@@ -366,7 +312,7 @@
   function equivalentModules(moduleId) {
     const cix = (typeof SMR.curriculumIndex === 'function') ? SMR.curriculumIndex() : null;
     if (!cix) return [];
-    /* 6D.8 (INT-02): el índice ya no expone el Map byId; usar la API. */
+    /* El índice no expone byId; la consulta debe pasar por la API. */
     const me = (typeof SMR.getModuleById === 'function') ? SMR.getModuleById(moduleId) : null;
     if (!me || me.code == null || me.kind === 'electives') return [];
 
@@ -376,7 +322,6 @@
       if (!out.some((x) => x.moduleId === otherId)) out.push({ moduleId: otherId, equivalence: level, confidence });
     };
 
-    /* Grupo strong: mismo código + mismo segmento de curso. */
     cix.modules.forEach((m) => {
       if (m.moduleId === me.moduleId || m.code == null || m.kind === 'electives') return;
       if (String(m.code) === String(me.code) && m.courseSegment === me.courseSegment) {
@@ -384,7 +329,6 @@
       }
     });
 
-    /* Reglas parciales curadas, en ambas direcciones. */
     EQUIV_RULES.forEach((r) => {
       const sideA = me.code != null && String(me.code) === String(r.a.code) && me.courseSegment === r.a.segment;
       const sideB = me.code != null && String(me.code) === String(r.b.code) && me.courseSegment === r.b.segment;
@@ -422,7 +366,6 @@
       if (l.status !== 'active') errors.push({ code: 'inactive-link', moduleId: l.moduleId, topicId: l.topicId, status: l.status, detail: 'los links en review NO se tabulan' });
     });
 
-    /* Duplicados (moduleId, topicId). */
     const seen = new Set();
     ix.links.forEach((l) => {
       const k = l.moduleId + '|' + l.topicId;
@@ -479,7 +422,6 @@
       });
       if (new Set(g.moduleIds).size !== g.moduleIds.length) errors.push({ code: 'duplicate-group-member', scope: g.key });
       if (g.moduleIds.length < 1) warnings.push({ code: 'empty-group', scope: g.key });
-      /* Pares strong del grupo (para conteo). */
       for (let i = 0; i < g.moduleIds.length; i++) {
         for (let j = i + 1; j < g.moduleIds.length; j++) pairStrong.add(g.moduleIds[i] + '|' + g.moduleIds[j]);
       }
@@ -533,6 +475,6 @@
   SMR.equivalentModules = equivalentModules;
   SMR.validateModuleEquivalences = validateModuleEquivalences;
 
-  /* Internos solo para las pruebas de la fase (no es API pública). */
+  /* Internos para pruebas; no forman parte de la API pública. */
   SMR.__moduleTopicsInternals = Object.freeze({ CODE_LINKS: Object.freeze(CODE_LINKS), EQUIV_RULES: Object.freeze(EQUIV_RULES), buildIndex });
 })(typeof window !== 'undefined' ? window : globalThis);

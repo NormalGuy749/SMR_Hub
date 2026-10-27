@@ -1,20 +1,9 @@
 #!/usr/bin/env bash
-# =====================================================================
-# SMR Hub — runner de regresión (auditoría de estabilización).
-#
-# QUÉ ES: el mecanismo mínimo para ejecutar TODO lo que el repositorio ya
-# tenía, sin dependencias nuevas ni cambio de flujo de publicación:
-#   1) node --check de js/*.js
-#   2) todas las suites Node de tests/*.test.js
-#   3) los harnesses de tests/*.sh contra el stack local, si está en marcha
-#
-# NO es un CI: no instala nada, no despliega y no levanta el stack. Los
-# harnesses de PostgreSQL declaran su precondición con exit 2 (contenedor o
-# API local no disponible); aquí eso se informa como OMITIDO, nunca como
-# aprobado. Cualquier otro fallo cuenta como FALLO y el runner sale con 1.
-#
-# Uso:   bash tests/run-all.sh            (desde la raíz del repositorio)
-# =====================================================================
+# Desde la raíz: bash tests/run-all.sh. Comprueba sintaxis JS, suites Node
+# y harnesses contra el stack local, sin instalar ni levantar servicios.
+# Los harnesses pueden escribir fixtures o aplicar migraciones locales.
+# exit 2 indica una precondición ausente y se informa como OMITIDO, nunca
+# como aprobado; cualquier otro fallo hace que el runner termine con 1.
 set -u
 cd "$(dirname "$0")/.." || exit 2
 

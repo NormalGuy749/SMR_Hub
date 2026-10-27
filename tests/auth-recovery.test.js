@@ -1,16 +1,7 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.6.1: recuperación de contraseña (js/auth.js).
-
-   FIDELIDAD: se carga el módulo REAL js/auth.js dentro de un entorno
-   simulado (window, DOM mínimo, SMR.modal, SMR.cloud.auth). Supabase es un
-   mock explícito: son pruebas de LÓGICA con mocks. No demuestran el
-   comportamiento real de GoTrue ni de los correos de recuperación.
-
-   Ejecutar desde la raíz:   node tests/auth-recovery.test.js
-   Probar otra versión:      AUTH_JS=/ruta/auth.js node tests/auth-recovery.test.js
-   ===================================================================== */
+/* Ejecuta auth.js real con DOM, modal y SDK simulados. No prueba GoTrue
+   ni el envío de correos. AUTH_JS permite probar otra copia del módulo. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -127,9 +118,9 @@ function submitForm(env, values) {
   /* --- 2. Eventos repetidos no reabren el formulario ---------------- */
   await (async () => {
     const env = makeEnv();
-    await flush(); /* la inicialización (getSession sin sesión) termina antes del evento */
+    await flush(); /* Resolver el arranque sin sesión antes de emitir el evento controlado. */
     await env.auth.emit('PASSWORD_RECOVERY', sess);
-    await flush(); /* la inicialización (getSession sin sesión) termina antes del evento */
+    await flush();
     await env.auth.emit('PASSWORD_RECOVERY', sess);
     await flush();
     assert(env.modal.opens === 1, 'un segundo PASSWORD_RECOVERY no reabre el formulario');
@@ -139,7 +130,7 @@ function submitForm(env, values) {
   /* --- 3. Éxito marca "completado"; reenvío no finge error ---------- */
   await (async () => {
     const env = makeEnv();
-    await flush(); /* la inicialización (getSession sin sesión) termina antes del evento */
+    await flush();
     await env.auth.emit('PASSWORD_RECOVERY', sess);
     await flush();
     await submitForm(env, { password: 'nueva123' });
@@ -158,7 +149,7 @@ function submitForm(env, values) {
   /* --- 4. Validación local: sin petición de red --------------------- */
   await (async () => {
     const env = makeEnv();
-    await flush(); /* la inicialización (getSession sin sesión) termina antes del evento */
+    await flush();
     await env.auth.emit('PASSWORD_RECOVERY', sess);
     await flush();
     await submitForm(env, { password: '123' });
@@ -172,7 +163,7 @@ function submitForm(env, values) {
   await (async () => {
     let release;
     const env = makeEnv({ update: () => new Promise((r) => { release = r; }) });
-    await flush(); /* la inicialización (getSession sin sesión) termina antes del evento */
+    await flush();
     await env.auth.emit('PASSWORD_RECOVERY', sess);
     await flush();
     const p1 = submitForm(env, { password: 'nueva123' });
@@ -197,7 +188,7 @@ function submitForm(env, values) {
         return { data: {}, error: null };
       }
     });
-    await flush(); /* la inicialización (getSession sin sesión) termina antes del evento */
+    await flush();
     await env.auth.emit('PASSWORD_RECOVERY', sess);
     await flush();
     await submitForm(env, { password: 'nueva123' });
@@ -213,14 +204,11 @@ function submitForm(env, values) {
   /* --- 7. SIGNED_OUT durante la recuperación limpia el estado ------- */
   await (async () => {
     const env = makeEnv();
-    await flush(); /* la inicialización (getSession sin sesión) termina antes del evento */
+    await flush();
     await env.auth.emit('PASSWORD_RECOVERY', sess);
     await flush();
     await env.auth.emit('SIGNED_OUT', null);
     await flush();
-    /* 8.6.2: el logout cierra el modal de recuperación (sin sesión no hay
-       formulario útil), así que ya no se puede reenviar: la aserción anterior
-       (modal abierto + LINK_ERROR a posteriori) quedó obsoleta. */
     assert(env.modal.closes === 1 && env.modal.current === null, 'SIGNED_OUT cierra el modal de recuperación abierto');
     assert(countOf(env, 'update') === 0, 'tras SIGNED_OUT no se llama a updateUser');
   })();
@@ -229,10 +217,10 @@ function submitForm(env, values) {
   /* --- 7b. Abandonar a otra vista limpia el flag -------------------- */
   await (async () => {
     const env = makeEnv();
-    await flush(); /* la inicialización (getSession sin sesión) termina antes del evento */
+    await flush();
     await env.auth.emit('PASSWORD_RECOVERY', sess);
     await flush();
-    env.SMR.auth.open('login');      /* cambio de vista: abandona el flujo */
+    env.SMR.auth.open('login');
     env.SMR.auth.open('update-password');
     await submitForm(env, { password: 'nueva123' });
     assert(countOf(env, 'update') === 0, 'abandonar a otra vista: updateUser no se llama');
@@ -323,7 +311,6 @@ function submitForm(env, values) {
   })();
   record('solicitud de recuperación: éxito y error');
 
-  /* --- auto-verificación del runner --------------------------------- */
   if (process.env.AUTH_RECOVERY_SELFTEST === '1') {
     await (async () => { assert(1 === 2, 'auto-verificación: aserción forzada a fallar'); })();
     record('auto-verificación (no debe llegar aquí)');

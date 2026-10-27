@@ -1,13 +1,8 @@
 'use strict';
 
-/* =====================================================================
-   Fase 8.5.3 — Pruebas de concurrencia SRS con la RPC merge_srs_cards
-   --------------------------------------------------------------------
-   MOCK EXPLÍCITO: un único servidor compartido en memoria emula
-   atómicamente la RPC (INSERT ... ON CONFLICT DO UPDATE de la migración
-   00006): cero sleeps, orden controlado por la resolución de promesas.
-   Este archivo NO toca Supabase real (eso es Fase E, con BD local).
-   ===================================================================== */
+/* Cliente SRS real con una RPC simulada en un servidor compartido en memoria.
+   La política atómica replica 00006; las promesas controlan el interleaving.
+   No ejecuta PostgreSQL: el tuple-lock real se prueba en pg-local-concurrency.sh. */
 
 const fs = require('fs');
 let passed = 0, failed = 0;
@@ -183,8 +178,8 @@ async function main() {
     const syncB = makeClient(g, pB, sbB, 'uid')('uid', 1000, { owner: 'uid', uid: 'uid', dataRef: pB.data });
     /* orden inverso: B completo antes que A (test controla el orden) */
     await syncB;
-    /* nota: el párrafo pull de A puede haber corrido antes del push de B;
-       la aserción INTERMEDIA es frágil — lo que se prueba es el FINAL */
+    /* El pull de A puede adelantarse al push de B: se comprueba el estado
+       final, no un estado intermedio dependiente del orden de microtareas. */
     await syncA;
     const row = db.srs_cards.find((r) => r.question_key === QA);
     assert(row.level === 3 && row.due === 9000, 'tras ambos, nivel mayor debe prevalecer, hay ' + JSON.stringify(row));
@@ -265,7 +260,7 @@ async function main() {
     record('usuario no autenticado: RPC rechaza, local intacto');
   } catch (e) { failRun('no autenticado', e); }
 
-  /* 8. Aislamiento entre dos usuarios reales */
+  /* Aislamiento entre dos usuarios en el servidor simulado. */
   try {
     const dbA = {}, dbB = {};
     const sbA = makeSharedRpc(dbA, { uid: 'uidA' });
@@ -290,8 +285,6 @@ async function main() {
     /* el sync hace pull primero (RPC no afecta al pull), luego falla el push;
        el local DEBE ganar los 3 puntos de nivel mayores: flush del merge local */
     await makeClient(g, pA, sbFail, 'uid')('uid', 1000, { owner: 'uid', uid: 'uid', dataRef: pA.data });
-    /* pull trajo la fila {3,9999} del cloud; tras el merge local, el local
-       ahora es {3,9999}; el push RPC falla; local NO se pierde */
     assert(pA.data.tests.srs[QA].level === 3, 'local debía absorber la revisión cloud {3,9999}, hay ' + JSON.stringify(pA.data.tests.srs[QA]));
     record('RPC inexistente: sin fallback LWW, local conserva el merge y no se pierde progreso');
   } catch (e) { failRun('RPC inexistente', e); }

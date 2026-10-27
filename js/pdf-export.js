@@ -1,21 +1,8 @@
 'use strict';
 
-/* SMR Hub — Exportación de exámenes y fichas de estudio
-   -----------------------------------------------------------------
-   Sin librerías ni dependencias: el «PDF» es el diálogo de impresión del
-   navegador (window.print) sobre un contenedor solo-impresión
-   (#exam-print-view) con hoja A4 definida en css/print.css.
-
-   Banco de preguntas: el mismo que usan los tests, SMR_DATA.tests[].questions[]
-   ya normalizado por js/questions.js (q, options, correct, topic, explain).
-
-   API:
-     SMR.pdfExport.configureExam(options)  → datos del examen (filtra el banco)
-     SMR.pdfExport.renderExamDOM(exam)     → pinta #exam-print-view
-     SMR.pdfExport.exportToPDF(exam?)      → renderiza y abre window.print()
-     SMR.pdfExport.render(root)            → vista de configuración (/exportar)
-
-   Sin red, sin localStorage y sin tocar el progreso del estudiante. */
+/* El PDF usa window.print sobre #exam-print-view y css/print.css (A4).
+   El banco es el compartido con los tests, normalizado por questions.js.
+   Generar o reimprimir un examen no modifica el progreso. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
@@ -63,11 +50,8 @@
     return topics.sort((a, b) => a.localeCompare(b, 'es'));
   }
 
-  /* ---------------------------------------------------------------
-     configureExam: filtra por módulo (test) y tema, y recorta a la
-     cantidad pedida. Devuelve TODO lo que necesita el renderizador,
-     para que el examen se pueda reimprimir sin volver a consultar el banco.
-     --------------------------------------------------------------- */
+  /* El examen incluye los datos del render para poder reimprimir sin
+     volver a consultar ni seleccionar preguntas del banco. */
 
   function configureExam(options) {
     const opts = options || {};
@@ -88,7 +72,6 @@
       });
     });
 
-    /* Sin cantidad válida, 20; si la piden, se respeta dentro de [1, 100]. */
     const requested = Number(opts.count);
     const valid = opts.count !== undefined && opts.count !== '' && Number.isFinite(requested);
     const wanted = valid ? Math.max(1, Math.min(Math.floor(requested), MAX_COUNT)) : 20;
@@ -112,10 +95,7 @@
     };
   }
 
-  /* ---------------------------------------------------------------
-     renderExamDOM: marcado del examen. Todo con clases propias para que
-     css/print.css mande en papel y no herede la tipografía de la SPA.
-     --------------------------------------------------------------- */
+  /* Las clases de impresión son propias para no heredar la tipografía de la SPA. */
 
   function solutionsHtml(questions) {
     return `
@@ -180,7 +160,6 @@
     return host;
   }
 
-  /* --------------------------------------------------------------- */
 
   function readForm() {
     const value = (id) => {
@@ -209,9 +188,6 @@
     return data;
   }
 
-  /* ---------------------------------------------------------------
-     Vista de configuración (ruta /exportar).
-     --------------------------------------------------------------- */
 
   function render(root) {
     const tests = testsWithQuestions();

@@ -1,24 +1,9 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.6.3 (etapa 1): contrato de propiedad y aislamiento
-   del perfil (slot 'studentProfile') entre cuentas del mismo dispositivo.
-
-   Carga los módulos REALES en el ORDEN DE index.html:
-       js/profile.js → js/cloud-profile.js → js/cloud-progress.js
-   con un mock explícito de Supabase y un mock de Web Locks con concesión
-   ASÍNCRONA (como un navegador real: el callback del lock no corre
-   síncronamente).
-
-   Antes del contrato, cloud-profile.js leía el slot vivo en el hueco
-   entre su listener (se carga antes) y la transición de slots de
-   cloud-progress.js, y subía el perfil de A a la fila cloud de B.
-   Demostrado contra HEAD en un directorio temporal (ver informe).
-
-   Son pruebas de LÓGICA con mocks: no sustituyen a Supabase real.
-
-   Ejecutar desde la raíz:   node tests/profile-owner.test.js
-   ===================================================================== */
+/* Carga profile → cloud-profile → cloud-progress en el orden de index.html.
+   Supabase es un mock y Web Locks concede en una tarea asíncrona.
+   El perfil no puede leer el slot entre authchange y su transición: el
+   contrato debe esperar al dueño correcto. No valida un servidor real. */
 
 const fs = require('fs');
 const srcProfile = fs.readFileSync('js/profile.js', 'utf8');
@@ -52,7 +37,7 @@ function makeEnv(opts) {
   const o = opts || {};
   const ls = new Map();
   const listeners = {};
-  const profileWrites = [];   /* { uid, payload, via } */
+  const profileWrites = [];
   const profileReads = [];
   let heldReads = [];
   let holding = !!o.holdProfileRead;
@@ -194,7 +179,7 @@ test('A → B: el perfil de A no contamina la cuenta B', async () => {
 
   env.auth(user('uid-A'));
   await flush();
-  env.writes.length = 0;                 /* solo interesa la transición */
+  env.writes.length = 0;
 
   env.auth(user('uid-B'));
   await flush(20);
@@ -211,9 +196,8 @@ test('A → B: el perfil de A no contamina la cuenta B', async () => {
     'el perfil de A debe quedar archivado bajo A (sin pérdida)');
 });
 
-/* 2. Sin Web Locks NO hay transición (fail-closed 8.6.3): el fallback ya no
-      ejecuta la transición sin exclusión, y por eso tampoco puede filtrar.
-      Se comprueba el MOTIVO (no se transicionó), no solo la ausencia de fuga. */
+/* Sin Web Locks la transición no se ejecuta. Se comprueba esa causa,
+   además de la ausencia de escrituras cruzadas. */
 test('A → B sin Web Locks: fail-closed (no se transiciona y no se filtra)', async () => {
   const env = makeEnv({ locks: false });
   env.seedLive('uid-A', PROFILE_A);
@@ -288,7 +272,7 @@ test('respuesta tardía del perfil de A: no se aplica al slot de B', async () =>
     holdProfileRead: true,
     cloudProfiles: { 'uid-A': { community: 'aaa', course: 1, academic_year: '2026-2027', curriculum_id: 'aaa' } }
   });
-  env.seedLive('uid-A', { community: 'aaa', academicYear: '2026-2027' }); /* sin course */
+  env.seedLive('uid-A', { community: 'aaa', academicYear: '2026-2027' });
 
   env.auth(user('uid-A'));
   await flush();
@@ -332,8 +316,8 @@ test('push encolado antes del cambio de uid: sin escrituras cruzadas', async () 
 
   env.auth(user('uid-A'));
   await flush(20);
-  env.g.SMR.profile.save({ course: 1 }); /* encola un push diferido para A */
-  env.auth(user('uid-B'));               /* el uid cambia antes de que dispare */
+  env.g.SMR.profile.save({ course: 1 });
+  env.auth(user('uid-B'));
   await flush(20);
   await sleep(1100);
   await flush(20);

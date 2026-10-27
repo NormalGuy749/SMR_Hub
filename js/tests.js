@@ -1,12 +1,8 @@
 'use strict';
 
-/* SMR Hub — tests de autoevaluación (fase 6)
-   Modos: práctica, rápido, examen configurable (nº/cat/dificultad/timer/
-   estricto), completo, repaso de errores, test adaptativo y repaso SRS.
-   Resultados por categoría y por tema, revisión con enlaces a recursos,
-   explicación de por qué las demás opciones son incorrectas y autoevaluación
-   "No lo sabía / Dudé / Lo sabía" que alimenta la repetición espaciada.
-   Se conecta a /tests desde app.js y expone API para el Modo Estudio. */
+/* Motor compartido por /tests, Modo Estudio y Dashboard. Las sesiones
+   multi-test conservan testId y origIndex para atribuir progreso y SRS
+   al banco de origen de cada pregunta. */
 
 window.SMR_TESTS = (function () {
 
@@ -56,9 +52,8 @@ window.SMR_TESTS = (function () {
   /* ---------- Sesión ---------- */
 
   let session = null;
-  /* 8.5.10: aviso de un solo uso del repaso SRS (se consume al pintar la
-     siguiente pregunta, para que el resultado del borrado no se pierda
-     con el repintado de la pantalla). */
+  /* El aviso del borrado se consume al pintar la siguiente pregunta
+     para que sobreviva al reemplazo de la pantalla. */
   let srsNotice = '';
   /* { testId, title, mode, questions, index, correct, answers, cfg, remaining,
      intervalId, multi, strict, startedAt, timeSpent, examFilter } */
@@ -110,7 +105,6 @@ window.SMR_TESTS = (function () {
     return list;
   }
 
-  /* Todas las preguntas del banco con metadatos */
   function allCandidates() {
     const out = [];
     getTests().forEach((t) => t.questions.forEach((q, i) => {
@@ -188,7 +182,6 @@ window.SMR_TESTS = (function () {
     };
   }
 
-  /* Examen configurable: mezcla del banco completo con reparto equilibrado */
   function buildExamSession(opts = {}) {
     let pool = allCandidates();
     const category = opts.category && opts.category !== 'Todas' ? opts.category : null;
@@ -503,7 +496,6 @@ window.SMR_TESTS = (function () {
           </ul>
         </section>` : ''}`;
 
-    /* Lanzador del examen configurable */
     root.querySelector('#exam-start').addEventListener('click', () => {
       const countVal = root.querySelector('#exam-count').value;
       const count = countVal === 'all' ? Infinity : Number(countVal);
@@ -527,10 +519,8 @@ window.SMR_TESTS = (function () {
       renderQuestion(root);
     });
 
-    /* Lanzador del adaptativo */
     root.querySelector('#adaptive-start').addEventListener('click', () => startAdaptive(root));
 
-    /* Tarjetas por test */
     root.querySelectorAll('[data-test-card]').forEach((card) => {
       const testId = card.dataset.testCard;
       const countSel = card.querySelector('[data-count]');
@@ -555,10 +545,8 @@ window.SMR_TESTS = (function () {
     });
   }
 
-  /* ---------- Fase 8.8: aviso sobre la pregunta en pantalla ----------
-     Solo se ofrece si la pregunta tiene identidad ESTABLE del banco: un
-     aviso sin identidad no es accionable. La interfaz no habla con
-     Supabase: llama al contrato SMR.feedback (js/cloud-feedback.js). */
+  /* Solo una identidad estable permite reportar una pregunta. La UI
+     delega en SMR.feedback; no escribe directamente en Supabase. */
 
   function reportHtml(testId, origIndex) {
     const fb = window.SMR.feedback;
@@ -739,12 +727,10 @@ window.SMR_TESTS = (function () {
       window.SMR.openResource(link.dataset.reviewRes);
     });
 
-    /* 8.5.10: quitar del repaso la tarjeta que se está viendo (mismo
-       contrato y misma confirmación que 8.5.9; el avance lo decide
-       advanceAfterSrsDrop). */
+    /* El borrado comparte confirmación; el avance del repaso lo decide
+       advanceAfterSrsDrop para no saltar preguntas. */
     if (s.mode === 'srs') wireSrsDrop(root, (testId, origIndex, message) => advanceAfterSrsDrop(root, testId, origIndex, message));
 
-    /* Fase 8.8: aviso sobre la pregunta en pantalla. */
     wireReport(root);
 
     nextBtn.addEventListener('click', () => {
@@ -772,7 +758,6 @@ window.SMR_TESTS = (function () {
     return 'Repasa los recursos de la sección y repite el test.';
   }
 
-  /* Recursos a repasar según las preguntas falladas */
   function recommendationsFor(answers) {
     const counts = {};
     answers.forEach((a) => {
@@ -790,7 +775,6 @@ window.SMR_TESTS = (function () {
       .filter(Boolean);
   }
 
-  /* Rendimiento por categoría y por tema */
   function breakdownFor(answers) {
     const byCat = {};
     const byTopic = {};
@@ -993,18 +977,12 @@ window.SMR_TESTS = (function () {
     root.querySelector('#quiz-back').addEventListener('click', () => renderIndex(root));
   }
 
-  /* 8.5.4-C: autoevaluación SRS en la lista de revisión del resultado.
-     La valoración (0 «No lo sabía» / 1 «Dudé» / 2 «Lo sabía») es la
-     percepción del usuario: NUNCA se deduce de acierto/fallo. Solo se
-     muestra si SMR.srs.idOf resuelve la identidad estable de la pregunta
-     (con el test de ORIGEN en sesiones multi); si no hay identidad no se
-     muestran controles que puedan crear claves posicionales inválidas.
-     Llama a la función existente SMR.progress.scheduleSrs(testId,
-     origIndex, rate), ya conectada a la sincronización cloud (push RPC
-     merge_srs_cards vía snapshotProgress; fix 8.5.4-B1). */
+  /* La valoración expresa percepción del usuario, nunca se deduce del acierto.
+     Solo se ofrece con identidad estable y usa el test de origen en sesiones
+     multi-test. scheduleSrs persiste y sincroniza la tarjeta por el contrato
+     existente de progreso; la UI no crea claves posicionales. */
   const SRS_RATE_LABELS = ['No lo sabía', 'Dudé', 'Lo sabía'];
 
-  /* Rate actual de la pregunta en tests.srs (o null si no tiene). */
   function srsRateOf(testId, origIndex) {
     const srs = progress().data.tests.srs;
     const key = window.SMR.srs && SMR.srs.idOf(testId, origIndex);
@@ -1013,8 +991,6 @@ window.SMR_TESTS = (function () {
     return { key, level: entry && typeof entry.level === 'number' ? entry.level : null };
   }
 
-  /* HTML de la fila de valoración para un elemento de review.
-     Sin identidad estable: hilo vacío (no se puede crear tarjeta). */
   function srsRateHtml(testId, origIndex) {
     if (!window.SMR.srs || typeof window.SMR.srs.idOf !== 'function') return '';
     const { key, level } = srsRateOf(testId, origIndex);
@@ -1026,12 +1002,9 @@ window.SMR_TESTS = (function () {
     return `<div class="self-check-row review-srs-rate" role="group" aria-label="Valoración SRS">${btns}</div>`;
   }
 
-  /* 8.5.9: quitar una tarjeta del repaso (borrado SRS).
-     La UI solo confirma y llama al dropSrs real: el borrado es local e
-     inmediato y la propagación remota (tombstone) la resuelve
-     cloud-progress con su marca pending y la RPC; aquí no se toca ni el
-     SRS ni esa marca. El mensaje nunca promete borrado remoto inmediato.
-     Sin identidad estable no hay tarjeta que quitar (fila vacía). */
+  /* La UI solo confirma y llama a dropSrs: el borrado local es inmediato.
+     cloud-progress propaga el tombstone; el mensaje no promete un borrado
+     remoto ya confirmado. Sin identidad estable no se ofrece la acción. */
   function srsDropHtml(testId, origIndex) {
     const { key, level } = srsRateOf(testId, origIndex);
     if (!key) return '';
@@ -1089,19 +1062,14 @@ window.SMR_TESTS = (function () {
     });
   }
 
-  /* Refresco local tras el borrado: la tarjeta ya no existe, así que la
-     acción se oculta y el rate vuelve a "sin valorar" (re-valorar es el
-     revive explícito); si el borrado falla, la acción sigue disponible. */
-  /* 8.5.10: avance determinista del repaso SRS tras quitar la tarjeta
-     actual. La tarjeta sale del conjunto (y su respuesta, si ya la había
-     dado, para que los totales del resultado no cuenten una pregunta que
-     ya no está); el índice queda apuntando a la siguiente sin saltarse
-     ninguna ni repetirla. Si era la última, el repaso termina. */
+  /* Al quitar una tarjeta sale también su respuesta para no alterar los
+     totales del repaso. El índice sigue en la siguiente, sin saltarla
+     ni repetirla; si se quitó la última, la sesión termina. */
   function advanceAfterSrsDrop(root, testId, origIndex, message) {
     const s = session;
     if (!s || s.mode !== 'srs') return;
     const at = s.questions.findIndex((q) => q.testId === testId && q.origIndex === origIndex);
-    if (at < 0) return; /* ya no está en el repaso: nada que avanzar */
+    if (at < 0) return;
     const card = s.questions[at];
     const ansAt = s.answers.findIndex((a) => a.question === card);
     if (ansAt >= 0) {
@@ -1109,13 +1077,13 @@ window.SMR_TESTS = (function () {
       s.answers.splice(ansAt, 1);
     }
     s.questions.splice(at, 1);
-    if (!s.questions.length) { /* se quedó sin repasos: estado vacío ya existente */
+    if (!s.questions.length) {
       stop();
       session = null;
       renderIndex(root, 'No hay repasos vencidos hoy. Vuelve cuando venzan.');
       return;
     }
-    if (at >= s.questions.length) { srsNotice = ''; renderResult(root); return; } /* era la última: el repaso acaba */
+    if (at >= s.questions.length) { srsNotice = ''; renderResult(root); return; }
     srsNotice = message || ''; /* el aviso viaja a la siguiente pantalla */
     renderQuestion(root);
   }
@@ -1170,12 +1138,9 @@ window.SMR_TESTS = (function () {
     });
   }
 
-  /* Wiring: un listener por botón en cada render; cada clic registra UNA
-     valoración (scheduleSrs es idempotente por PK question_key) y
-     actualiza el estado visual del grupo. Re-valorar sobrescribe la
-     entrada { level, due } de la tarjeta (semántica real de
-     scheduleSrs: el nivel se ajusta relativo al actual y la due se
-     recalcula — no hay doble registro ni conflicto de persistencia). */
+  /* El listener debe sobrevivir a las revaloraciones: no usar once.
+     Cada clic recalcula nivel y due sobre la misma tarjeta; repetir una
+     opción, incluso en otra pregunta, sigue siendo una interacción válida. */
   function wireSrsRating(root) {
     if (!window.SMR.srs) return;
     root.querySelectorAll('[data-srs-rate]').forEach((btn) => {
@@ -1196,10 +1161,9 @@ window.SMR_TESTS = (function () {
     });
   }
 
-  /* Arranca una sesión con un subconjunto de preguntas YA elegido (dashboard
-     de repaso inteligente). Recibe candidatos { q, origIndex, testId,
-     testTitle, category } y reutiliza el motor: corrección, autoevaluación
-     SRS, registro del resultado y revisión final son los mismos. */
+  /* El llamante ya seleccionó y priorizó los candidatos
+     { q, origIndex, testId, testTitle, category }. Se conserva ese orden
+     al reutilizar el motor de preguntas, progreso y revisión final. */
   function startSession(questions, root) {
     const host = root || document.getElementById('content');
     if (!host || !Array.isArray(questions) || !questions.length) return false;

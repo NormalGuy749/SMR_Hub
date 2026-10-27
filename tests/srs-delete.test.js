@@ -1,19 +1,9 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.5.7: tests del borrado SRS (tombstones + revive).
-   MOCKS EXPLÍCITOS:
-   - app.js NO se carga: dropSrs/scheduleSrs se sustituyen por stubs que
-     replican su contrato real ({level,due} por clave estable); el módulo
-     cloud-progress envuelve esos stubs con sus hooks (texto real del
-     archivo, extraído por marcador).
-   - Cliente Supabase: mock en memoria. Su RPC implementa una RÉPLICA de
-     la política de 00008 (tombstone pegajoso; revive explícito; el resto
-     idéntico a 00007). No es PostgreSQL: la verificación real del SQL es
-     tests/pg-srs-delete.sh (contenedor local, no aplica remoto).
-   - store: localStorage en memoria bajo el contrato SMR.store de app.js.
-   NINGUNA prueba de esta suite toca Supabase real.
-   ===================================================================== */
+/* Ejecuta los hooks y helpers SRS reales de cloud-progress.js. El store
+   está en memoria; dropSrs/scheduleSrs son stubs del contrato de app.js.
+   La RPC simulada replica 00008 (tombstone persistente y revive explícito);
+   el SQL real se verifica por separado en pg-srs-delete.sh. */
 
 const fs = require('fs');
 const srcSrs = fs.readFileSync('js/srs.js', 'utf8');
@@ -191,7 +181,6 @@ function makeHarness(opts) {
   return { g, SMR, SMRp, sb, state, env, storage, store, ID_A: g.SMR.srs.idOf('t-t1', 0), ID_B: g.SMR.srs.idOf('t-t1', 1) };
 }
 
-/* ------------------------------------------------------------------ */
 
 let passed = 0, failed = 0;
 const failures = [];
@@ -268,7 +257,7 @@ async function main() {
   try {
     const tomb = { user_id: 'uid-A', question_key: ID, level: 0, due: 1, client_updated_at: null, deleted_at: 111 };
     const h = makeHarness({ srsLocal: {}, clears: { [ID]: 'known' }, cloudRows: [tomb] });
-    h.SMRp.scheduleSrs('t-t1', 0, 2); /* re-valoración del propietario */
+    h.SMRp.scheduleSrs('t-t1', 0, 2);
     assert(h.env.readSrsClears()[ID] === 'revive', 'marca revive tras re-valorar');
     await sync(h);
     const sent = rpcCards(h, ID);

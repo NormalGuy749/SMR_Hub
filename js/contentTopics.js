@@ -1,31 +1,11 @@
 'use strict';
 
-/* SMR Hub — Mapping de recursos y casos → topics (fase 6D.5)
-   ------------------------------------------------------------------
-   Capa DERIVADA y de solo lectura que registra la relación editorial
-   recurso→topic y caso→topic.
-
-   A diferencia de questionTopics.js (auto-derivable de los aliases de
-   6D.3), aquí la relación NO puede deducirse mecánicamente: es una
-   decisión editorial. Por eso esta capa contiene una tabla CURADA de
-   enlaces (no de contenido): cada enlace declara ref, topicId, role,
-   confidence y evidence. El validador comprueba en carga que cada
-   ref existe realmente y cada topicId pertenece a SMR.topics.
-
-   Reglas aplicadas (diseño 6D.1/6D.3):
-   - 1 topic primary por recurso/caso; secondary solo con justificación.
-   - confidence: high (enseña directamente el topic), medium (lo trata
-     de forma parcial/contextual), review (evidencia insuficiente).
-   - NO se tocan content.js, cases, categories, topics.js,
-     questionTopics.js, SRS, localStorage ni moduleLinks (vacío hasta
-     6D.6).
-   - NO se recrean recursos inexistentes auditados en 6C.6.
-   - relatedResource de las preguntas es evidencia auxiliar (columna
-     "preguntas" de la auditoría), nunca autoridad.
-
-   Evidencia de la curación: contenido real volcado en la inspección
-   de esta fase (títulos, desc, content[], keyPoints, solutions) y
-   scratch_6d3/hallazgos_casos.md, scratch_6d3/preguntas_por_topic.txt. */
+/* Relaciones editoriales de recursos y casos con topics. No se derivan
+   mecánicamente de aliases: la tabla curada aporta role, confidence y evidence
+   a partir de títulos, contenido, keyPoints y soluciones reales.
+   high indica enseñanza directa; medium, tratamiento parcial o contextual;
+   review, evidencia insuficiente. relatedResource solo aporta evidencia
+   auxiliar, nunca decide la relación ni justifica recrear un recurso ausente. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
@@ -134,7 +114,7 @@
       version: CONTENT_TOPICS_VERSION,
       resources: Object.freeze(resources),
       cases: Object.freeze(cases),
-      /* 6D.8 (INT-02): lookups congelados, sin prototipo y sin Map expuesto. */
+      /* Lookups congelados, sin prototipo y sin Map expuesto a consumidores. */
       byResourceId: Object.freeze(Object.assign(Object.create(null), Object.fromEntries(resources.map((r) => [r.ref, r])))),
       byCaseId: Object.freeze(Object.assign(Object.create(null), Object.fromEntries(cases.map((c) => [c.ref, c])))),
       problems: Object.freeze(problems)

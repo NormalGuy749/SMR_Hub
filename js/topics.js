@@ -1,11 +1,11 @@
 'use strict';
 
-/* SMR Hub — Taxonomía canónica de temas (fase 6D.3)
+/* SMR Hub — Taxonomía canónica de temas
    ------------------------------------------------------------------
    Capa de topics estable, derivada del análisis del contenido REAL de
    las 154 preguntas (evidencia en scratch_6d3/preguntas_por_topic.txt).
 
-   Principios (diseño aprobado en 6D.1):
+   Principios:
    - Identidad técnica t-<slug>: determinista, legible, única, sin
      hashes, sin dependencia de arrays, localStorage, SRS, tests,
      cursos ni comunidades.
@@ -13,8 +13,8 @@
      oficiales ni equivalencias curriculares: es una capa propia.
    - Los topicId NO se escriben en las preguntas: q.topic queda intacto
      y se resuelve vía aliases (SMR.resolveTopicId).
-   - moduleLinks queda reservado y VACÍO: el anclaje curricular es de
-     fases posteriores (6D.6) y requiere revisión con evidencia.
+   - moduleLinks queda reservado y VACÍO: el anclaje curricular
+     pertenece a moduleTopics.js y requiere evidencia propia.
    - Fusión de raw strings SOLO cuando el contenido real confirma el
      mismo concepto; "Subnetting" y "VLSM" permanecen separados.
 
@@ -54,9 +54,8 @@
 
   const TAXONOMY_VERSION = 1;
 
-  /* ---------- Topics canónicos ----------
-     order: posición editorial estable dentro de la taxonomía.
-     moduleLinks: RESERVADO, vacío por diseño (fase 6D.6). */
+  /* order fija la posición editorial. moduleLinks permanece reservado
+     aquí; las relaciones curriculares se publican desde moduleTopics.js. */
 
   const TOPICS = [
     /* --- Virtualización (cat editorial: Virtualización) --- */
@@ -272,12 +271,10 @@
     const errors = [];
     const warnings = [];
 
-    /* A. IDs únicos. */
     if (byId.size !== TOPICS.length) {
       errors.push({ code: 'duplicate-topic-id', detail: 'hay topicId repetidos en la declaración' });
     }
 
-    /* B. Formato t-<slug> y campos obligatorios. */
     TOPICS.forEach((t) => {
       if (!TOPIC_ID_RE.test(t.id)) errors.push({ code: 'invalid-topic-id', topicId: t.id, detail: 'no cumple t-<slug>' });
       if (!t.name || typeof t.name !== 'string') errors.push({ code: 'invalid-topic', topicId: t.id, detail: 'sin name' });
@@ -287,14 +284,12 @@
       }
     });
 
-    /* C. parentTopic existente. */
     TOPICS.forEach((t) => {
       if (t.parentTopic && !byId.has(t.parentTopic)) {
         errors.push({ code: 'missing-parent', topicId: t.id, detail: 'parentTopic inexistente: ' + t.parentTopic });
       }
     });
 
-    /* D. Sin ciclos en parentTopic. */
     TOPICS.forEach((t) => {
       const seen = new Set();
       let cur = t;
@@ -308,7 +303,6 @@
       }
     });
 
-    /* E. Todo alias apunta a un topic existente. */
     Object.keys(ALIAS_GLOBAL).forEach((raw) => {
       if (!byId.has(ALIAS_GLOBAL[raw])) errors.push({ code: 'orphan-alias', detail: 'alias global "' + raw + '" → topic inexistente' });
     });
@@ -324,7 +318,7 @@
     /* F/G. Los raw q.topic reales se resuelven o quedan marcados:
        nunca se pierden silenciosamente. */
     const D = global.SMR_DATA || {};
-    const raws = new Map(); /* raw -> Set(categorías) */
+    const raws = new Map();
     (Array.isArray(D.tests) ? D.tests : []).forEach((t) => {
       (t.questions || []).forEach((q) => {
         if (typeof q.topic !== 'string' || !q.topic.trim()) return;
@@ -351,7 +345,6 @@
       if (!usedRaws.has(raw)) warnings.push({ code: 'unused-alias', detail: '"' + raw + '" está registrado pero no aparece en ninguna pregunta actual' });
     });
 
-    /* editorialCategory válida (capa distinta de topics, ya existente). */
     const cats = new Set((Array.isArray(D.categories) ? D.categories : []));
     TOPICS.forEach((t) => {
       if (t.editorialCategory !== null && !cats.has(t.editorialCategory)) {
@@ -373,7 +366,6 @@
     };
   }
 
-  /* ---------- Export ---------- */
 
   SMR.topics = Object.freeze({
     version: TAXONOMY_VERSION,

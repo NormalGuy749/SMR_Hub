@@ -1,35 +1,11 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Configuración pública de Supabase (auditoría de estabilización).
-
-   QUÉ ES: carga la configuración pública que sirve el despliegue (la salida de
-   la Pages Function, o la ranura js/cloud-config.public.js en la subida manual),
-   js/cloud-config.js y js/supabase.js en un sandbox
-   con un origen y un SDK falsos, y comprueba el CONTRATO de configuración para
-   una SPA estática: local, inyección previa, sin configuración, incompleta,
-   configuración local por error en origen público y CDN caída. Incluye el orden
-   de carga real de index.html, la Pages Function que sirve la configuración desde
-   las variables de entorno del proyecto (functions/js/cloud-config.public.js) y que
-   la RUTA que pide index.html es la que esa Function implementa: Pages genera la
-   ruta quitándole la última extensión al nombre del archivo (path.extname), así que
-   la Function de functions/js/cloud-config.public.js vive en /js/cloud-config.public
-   y una petición a /js/cloud-config.public.js NO la ejecutaría.
-
-   AUD-01 (8.9.1): desde b5895c0 index.html no lleva un <script src="…"> fijo para la
-   configuración: un bloque inline elige la fuente según el hostname y la escribe con
-   document.write. Este archivo EJECUTA ese bloque en un sandbox (location y document
-   falsos) y comprueba la rama de GitHub Pages, la relativa, la selección por hostname
-   y el orden de carga; además muta el HTML en memoria para demostrar que las
-   comprobaciones fallan si se rompe cualquiera de las dos cosas.
-
-   QUÉ NO ES: no hay claves reales, no se despliega y no se toca ninguno
-   Supabase remoto. La comprobación en producción está FUERA de alcance:
-   sin inyección pública la app queda local-first también allí.
-
-   Ejecutar desde la raíz:      node tests/cloud-config.test.js
-   Auto-verificación:           CLOUD_CONFIG_SELFTEST=1 node tests/cloud-config.test.js → exit 1
-   ===================================================================== */
+/* Ejecuta configuración, cliente y bootstrap reales con origen, DOM y SDK
+   simulados. La Pages Function también se ejecuta con context.env de prueba.
+   Se comprueban la selección por hostname, el orden de carga y el contrato
+   de ruta de Pages: /js/cloud-config.public, sin la última extensión .js.
+   Las mutaciones del HTML comprueban que las aserciones detectan roturas.
+   No valida credenciales ni el comportamiento de un despliegue remoto. */
 
 const fs = require('fs');
 const path = require('path');
@@ -83,15 +59,13 @@ function boot(o) {
   if (o2.sdk !== false) {
     g.supabase = { createClient: (url, key) => { calls.push({ url, key }); return { url, key }; } };
   }
-  /* Orden real de index.html: ranura (la rellena el despliegue) → valores
-     locales → cliente. La ranura por defecto es el archivo con seguimiento. */
+  /* Se reproduce el orden de arranque: configuración pública → local → cliente. */
   new Function('window', 'globalThis', 'slot' in o2 ? o2.slot : SRC_SLOT)(g, g);
   new Function('window', 'globalThis', SRC_CONFIG)(g, g);
   new Function('window', 'globalThis', SRC_SUPABASE)(g, g);
   return { g, said, calls };
 }
 
-/* Salida de la Pages Function para un entorno dado (texto JS). */
 function slotFrom(env) { return onRequestGet({ env }).body; }
 
 /* ---------- 1. Local con configuración local ---------- */
@@ -190,7 +164,6 @@ const GHP_HOST = 'normalguy749.github.io';
 const CFG_RELATIVA = 'js/cloud-config.public';
 const CFG_GHP_ABSOLUTA = 'https://smr-hub.pages.dev/js/cloud-config.public';
 
-/* Los `src` de los <script> de index.html, en orden de aparición. */
 function scriptSrcs(html) {
   return [...(html || HTML_INDEX).matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]);
 }
@@ -207,8 +180,6 @@ function inlineBootstrap(html) {
   return conWrite[0][2];
 }
 
-/* Ejecuta ese bloque con un `location` y un `document` falsos y devuelve el src
-   que pediría en ese origen. */
 function configSrcFor(html, host) {
   const escrito = [];
   const g = { location: { hostname: host }, document: { write: (s) => escrito.push(String(s)) } };
@@ -248,8 +219,6 @@ function checkOrder(html) {
 }
 
 check('8: index.html carga la configuración antes del cliente y del SDK', () => {
-  /* checkOrder exige bootstrap → CDN → cloud-config → supabase → auth → …;
-     inlineBootstrap ya exige que el bloque no sea defer/async. */
   checkOrder(HTML_INDEX);
   assert(scriptSrcs().some((s) => /supabase-js/.test(s)), 'la CDN del SDK no está como <script src>');
 });
@@ -349,14 +318,12 @@ check('13: la rama de GitHub Pages pide la configuración absoluta y las demás 
 /* ---------- 14. Sensibilidad: las comprobaciones anteriores no son vacuas ---------- */
 
 check('14: las comprobaciones fallan si se rompe la selección de hostname o el orden', () => {
-  /* Mutación 1: invertir la condición del hostname. */
   const condicion = "window.location.hostname === '" + GHP_HOST + "'";
   const rotoHost = HTML_INDEX.replace(condicion, "window.location.hostname !== '" + GHP_HOST + "'");
   assert(rotoHost !== HTML_INDEX, 'no se pudo mutar la condición del hostname (¿cambió el código de index.html?)');
   assert(configSrcFor(rotoHost, GHP_HOST) !== CFG_GHP_ABSOLUTA,
     'con la condición invertida la comprobación de GitHub Pages seguiría pasando');
 
-  /* Mutación 2: mover el bloque de configuración al final del documento. */
   const boot = inlineBootstrap(HTML_INDEX);
   const movido = HTML_INDEX.replace(boot, '').replace('</body>', '<script>' + boot + '</script></body>');
   assert(movido !== HTML_INDEX, 'no se pudo mover el bloque de configuración');

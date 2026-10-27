@@ -1,12 +1,7 @@
 'use strict';
 
-/* SMR Hub — ampliación de contenido (fase 6)
-   Carga tras data.js y fusiona sobre SMR_DATA:
-   - recursos nuevos (con minutes, tags y whyItMatters),
-   - lecciones enriquecidas de los recursos existentes,
-   - glosario ampliado,
-   - casos prácticos y rutas de aprendizaje.
-   Todo es opcional: si un bloque no existe, la app sigue funcionando. */
+/* Extiende SMR_DATA después de data.js sin sustituir los recursos existentes.
+   Los bloques opcionales pueden faltar sin impedir el arranque. */
 
 (function () {
   const D = window.SMR_DATA;
@@ -1331,7 +1326,6 @@
   const problems = [];
 
   function apply() {
-    /* Recursos nuevos: solo si su id no existe ya */
     const known = new Set((D.resources || []).map((r) => r.id));
     (NEW_RESOURCES || []).forEach((r) => {
       if (known.has(r.id)) return;
@@ -1354,7 +1348,6 @@
       if (!lesson.summary) lesson.summary = up.summary;
     });
 
-    /* Glosario */
     const terms = new Set((D.glossary || []).map((t) => String(t.term).toLowerCase()));
     (NEW_TERMS || []).forEach((t) => {
       if (terms.has(String(t.term).toLowerCase())) return;
@@ -1366,18 +1359,14 @@
       terms.add(String(t.term).toLowerCase());
     });
 
-    /* Casos y rutas: se publican en SMR_DATA para app.js y tests.js */
     D.cases = (D.cases || []).concat(CASES || []);
     D.learningPaths = (D.learningPaths || []).concat(LEARNING_PATHS || []);
 
-    /* Comprobaciones de integridad referencial (aviso en consola si algo falla).
-       Además del aviso, cada referencia que no resuelve se registra de forma
-       estructurada en SMR_DATA.contentGaps: el aviso de consola se pierde al
-       recargar, la lista no, y es lo que permite resolver la incidencia después
-       (tests/content-integrity.test.js la compara con una línea base revisada).
-       NO se sustituye ninguna referencia por otra: sin equivalencia demostrada
-       por contenido y contexto, un id ajeno sería una relación falsa. El id
-       original se conserva intacto. */
+    /* contentGaps conserva referencias sin resolver para compararlas con la
+       línea base de tests/content-integrity.test.js. El aviso de consola
+       por sí solo no permite seguir esas incidencias. Sin equivalencia
+       demostrada por contenido y contexto, se conserva el id original:
+       sustituirlo por otro recurso inventaría una relación. */
     const resIds = new Set((D.resources || []).map((r) => r.id));
     const gaps = [];
     (D.learningPaths || []).forEach((p) => {

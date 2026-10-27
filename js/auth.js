@@ -1,36 +1,14 @@
 'use strict';
 
-/* SMR Hub — Fase 8.2: Supabase Authentication (solo identidad)
-   ------------------------------------------------------------------
-   Qué hace:
-   - Restaura sesión al arrancar (persistSession + autoRefreshToken, ya
-     configurados en js/supabase.js) y escucha SIGNED_IN / SIGNED_OUT /
-     PASSWORD_RECOVERY / INITIAL_SESSION.
-   - Widget en el pie del sidebar: "Iniciar sesión" (visitante) o email +
-     "Cerrar sesión" (autenticado).
-   - Modal coherente con el design system (SMR.modal): entrar, crear
-     cuenta, recuperar contraseña y establecer nueva contraseña.
-   - Provisioning del perfil: al primer SIGNED_IN garantiza (de forma
-     idempotente, ON CONFLICT DO NOTHING) que exista la fila en
-     public.profiles. Es el fallback client-side documentado en 8.0.2;
-     el trigger on_auth_user_created (migration 00002) hace lo propio en
-     el servidor. RLS (profiles_insert_own) solo permite insertar la
-     fila propia: el cliente jamás elige un user_id arbitrario.
-
-   Qué NO hace (fases 8.3+): sincronización de perfil académico, progreso,
-   SRS, favoritos, historial ni migración local→cloud. Solo identidad.
-
-   Integración sin romper APIs:
-   - NO toca SMR.store, SMR.progress, SMR.profile ni sus claves
-     localStorage existentes.
-   - Emite window event 'smr:authchange' con { user } para que fases
-     posteriores reaccionen. Nada de la app actual depende de él.
-   - Si Supabase no está disponible (offline / CDN caído / sin config),
-     el módulo queda inerte y el visitante estudia exactamente igual. */
+/* Autenticación y recuperación de contraseña. Publica smr:authchange
+   con { user } para los consumidores de sesión; no sincroniza progreso.
+   El provisioning de profiles complementa al trigger on_auth_user_created
+   sin sobrescribir la fila existente y con RLS limitado al usuario actual.
+   Sin cliente Supabase el módulo queda inerte y se conserva el modo local. */
 
 (function (global) {
   const SMR = (global.SMR = global.SMR || {});
-  if (!SMR.cloudAvailable || !SMR.cloud) return; /* visitante puro */
+  if (!SMR.cloudAvailable || !SMR.cloud) return;
 
   const auth = SMR.cloud.auth;
 
@@ -44,11 +22,9 @@
   SMR.auth = {
     get user() { return state.user; },
     isSignedIn() { return !!state.user; },
-    /* Scope 'local': revoca SOLO la sesión de este cliente (POST /logout?scope=local en
-       supabase-js v2, verificado; el default 'global' además mata las sesiones de otros
-       dispositivos y no hay requisito para ello). Con error de red el SDK limpia la sesión
-       local y emite SIGNED_OUT igualmente (v2.117.3): re-lanzar el error aquí sirve para
-       que la interfaz sepa del fallo sin fingir éxito ni duplicar la limpieza. */
+    /* scope local conserva las sesiones de otros dispositivos (el default es global).
+       El SDK puede limpiar la sesión y emitir SIGNED_OUT incluso con error de red;
+       se propaga el error para que la UI lo muestre sin duplicar esa limpieza. */
     async signOut() {
       const res = await auth.signOut({ scope: 'local' });
       if (res && res.error) throw res.error;
@@ -280,7 +256,7 @@
       const form = body.querySelector('form');
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (form.dataset.busy) return; /* doble envío: ignorar */
+        if (form.dataset.busy) return;
         setBusy(form, true);
         showMessage(box, '', false);
         const data = Object.fromEntries(new FormData(form).entries());
@@ -312,9 +288,8 @@
     if (!user) {
       state.profileEnsured = false;
       state.recovery = false;
-      /* El formulario de recuperación no sirve sin sesión: cerrarlo si estaba abierto
-         (SIGNED_OUT, también el propagado desde otra pestaña). La sesión persistente
-         del arranque nunca lo tiene abierto, así que la consulta es no-op fuera del logout. */
+      /* SIGNED_OUT puede llegar desde otra pestaña: el formulario de recuperación
+         abierto deja de ser utilizable sin sesión. */
       if (document.querySelector('[data-auth-form="update-password"]') && SMR.modal && typeof SMR.modal.close === 'function') {
         SMR.modal.close();
       }
@@ -330,9 +305,8 @@
 
   async function init() {
     try {
-      /* Suscripción ANTES de getSession(): el orden entre getSession y PASSWORD_RECOVERY no es
-         garantía contractual del SDK (depende del detalle de su inicialización). Suscribirse
-         primero evita depender de ello: la evidencia de pérdida del orden original es solo de mock. */
+      /* El SDK no garantiza el orden entre getSession y PASSWORD_RECOVERY;
+         suscribirse primero evita perder el evento de recuperación. */
       auth.onAuthStateChange(async (event, session) => {
         if (event === 'PASSWORD_RECOVERY') {
           state.recovery = true;
@@ -347,11 +321,9 @@
         /* TOKEN_REFRESHED: supabase-js ya renovó el token; nada que hacer. */
       });
 
-      /* Restauración de sesión al arrancar (persistencia tras refresh). */
       const { data, error } = await auth.getSession();
       if (error) console.warn('[SMR auth] getSession:', error.message);
       await handleSession(data && data.session ? data.session : null);
-      /* Enlace roto (error en URL) o código sin sesión: se explica y se ofrece pedir otro. */
       if ((linkFailed || hadAuthCode) && !state.user) openAuthModal('reset', LINK_ERROR);
     } catch (err) {
       /* Sin red o CDN caído: modo visitante intacto. */
@@ -359,7 +331,6 @@
     }
   }
 
-  /* Inyección del widget tras el nav del footer (configuración). */
   function injectWidget() {
     const footer = document.getElementById('nav-footer');
     if (!footer || document.querySelector('.auth-nav-item')) return;

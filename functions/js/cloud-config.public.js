@@ -1,27 +1,11 @@
-/* SMR Hub — Cloudflare Pages Function: configuración pública de Supabase
-   ----------------------------------------------------------------------
-   Ruta servida: /js/cloud-config.public. Pages genera la ruta quitando la
-   ÚLTIMA extensión del nombre del archivo (path.extname), así que
-   functions/js/cloud-config.public.js se sirve en /js/cloud-config.public,
-   sin .js. Esa es la ruta que pide index.html y no hay ningún archivo
-   estático en ella: la Function responde siempre, sin depender de tapar a
-   un asset. Fuente de la regla:
+/* Pages elimina solo la última extensión: este archivo sirve
+   /js/cloud-config.public, la ruta que pide index.html antes de supabase.js.
+   No debe existir un asset estático que tape esa ruta. Regla de Pages:
    https://github.com/cloudflare/workers-sdk/blob/main/packages/pages-functions/src/routing/filepath-routing.ts
-
-   POR QUÉ ASÍ: en un sitio estático de Pages las variables de entorno del
-   proyecto NO llegan al JavaScript del navegador; sí llegan a las Functions
-   por `context.env`. Esta Function lee SOLO los dos nombres públicos y
-   devuelve un script que el navegador carga ANTES de js/supabase.js.
-
-   SEGURIDAD: aquí no se lee ningún secreto (service_role, claves de
-   servicio, tokens). Todo lo que esta respuesta contiene acaba en el cliente,
-   así que solo puede contener la URL del proyecto y la clave publicable.
-   Si los valores no están o están mal formados, no se inyecta NADA y la
-   aplicación arranca en modo local-first (visitante/offline); el cliente
-   tiene su propia guarda para rechazar un endpoint loopback en un origen
-   público (js/supabase.js).
-
-   Configuración: DESPLIEGUE.md. Pruebas: tests/cloud-config.test.js */
+   Las variables de entorno llegan a context.env, no al sitio estático.
+   Esta respuesta acaba en el navegador: solo URL y clave pública, nunca
+   secretos de servidor. Sin valores válidos se devuelve un script inerte;
+   supabase.js también rechaza endpoints loopback en un origen público. */
 
 const URL_VAR = 'SMR_SUPABASE_URL';
 const KEY_VAR = 'SMR_SUPABASE_ANON_KEY';

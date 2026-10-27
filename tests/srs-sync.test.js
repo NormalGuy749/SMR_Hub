@@ -1,13 +1,8 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Fase 8.5: tests del adaptador SRS cloud (standalone, sin
-   dependencias). MOCKS EXPLÍCITOS:
-   - localStorage/navigator/addEventListener: ambiente navegador mínimo.
-   - Cliente Supabase: mock en memoria que resuelve select() con las
-     filas del estado (rows) y aplica upserts idempotentes por PK.
-   NINGUNA prueba de esta suite toca Supabase real.
-   ===================================================================== */
+/* Ejecuta helpers y syncSrsCards reales con navegador y SDK simulados.
+   Las filas y la política de la RPC viven en memoria; esta suite comprueba
+   el cliente y el merge, no la implementación SQL ni un servidor remoto. */
 
 const fs = require('fs');
 
@@ -25,7 +20,7 @@ function makeEnv() {
   const g = {
     console,
     localStorage: fakeLocalStorage,
-    /* 8.6.3: la transición exige exclusión (fail-closed); el arnés aporta un lock. */
+    /* El arnés concede el lock requerido por la transición de slots. */
     navigator: { locks: { request: (name, cb) => Promise.resolve().then(cb) } },
     addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
     removeEventListener: () => {},
@@ -145,8 +140,8 @@ async function main() {
     'const SRS_KEY_OK = /^q-[0-9a-f]{16}(?:-\\d+)?$/;',
     'const SRS_CARD_LIMIT = 500;',
     'const SRS_CLEARS_KEY = \'progressSyncSrsClears\';',
-    /* 8.5.14: syncSrsCards consulta el dueño persistido del slot vivo antes de
-       aplicar transiciones; el harness extrae también esos helpers. */
+    /* Se extraen los helpers de propiedad: syncSrsCards consulta el dueño
+       persistido antes de aplicar transiciones sobre las marcas. */
     'const LIVE_OWNER_KEY = \'liveOwner\';',
     'const GUEST_OWNER = \'__guest__\';',
     extractFn('function readLiveOwner('),
@@ -199,7 +194,6 @@ async function main() {
     const sessionHandle = { owner: uid, uid: uid, dataRef: SMRp.data };
     const sessionChanged = !!o.sessionChanged;
 
-    /* Módulo mínimo: sincroniza la firma real (helpers + syncSrsCards) */
     const fn = new Function(
       'global', 'SMR', 'sb', 'runtime', 'warn',
       'sessionHandleFor', 'sessionChangedFor',
@@ -274,7 +268,6 @@ async function main() {
   record('C7: nivel remoto mayor → gana cloud completo');
   function h_real_id_A() { return h.ID_A_REAL; }
 
-  /* nota: los tests siguientes usan IDs reales declarados antes */
   function realIds() {
     const e = makeEnv();
     e.g.window = e.g;
@@ -397,7 +390,7 @@ async function main() {
 
   {
     assert(srcProgress.includes('if (!SMR.cloudAvailable || !SMR.cloud || !SMR.progress) return;'), 'guard de módulo sin cloud');
-    /* 8.6.3: el guard también cubre la transición diferida (fail-closed). */
+    /* El guard también cubre la transición diferida sin exclusión. */
     assert(srcProgress.includes('if (!runtime.currentUser || runtime.transitionPending) return;'),
       'guard de pushState sin sesión ni transición pendiente');
   }

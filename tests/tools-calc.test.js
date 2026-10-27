@@ -1,18 +1,7 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — calculadoras de la página de herramientas (js/tools.js).
-
-   QUÉ ES: carga el módulo REAL en un sandbox y comprueba la aritmética de
-   permisos POSIX (octal ↔ simbólico, SUID/SGID/sticky) y la de RAID
-   (capacidad útil, redundancia, tolerancia, rendimiento relativo), más el
-   cableado de las dos secciones nuevas en el render y en el buscador.
-
-   QUÉ NO ES: no toca el DOM (los constructores usan createElement y
-   querySelector) ni valida el aspecto visual; eso se comprobó en navegador.
-
-   Ejecutar desde la raíz:  node tests/tools-calc.test.js
-   ===================================================================== */
+/* Ejecuta los cálculos reales de tools.js en un sandbox. El cableado
+   se comprueba de forma estática; no monta controles ni valida su aspecto. */
 
 const fs = require('fs');
 const vm = require('vm');

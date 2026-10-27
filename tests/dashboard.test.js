@@ -1,21 +1,8 @@
 'use strict';
 
-/* =====================================================================
-   SMR Hub — Dashboard de rendimiento (js/dashboard.js).
-
-   QUÉ ES: carga el módulo REAL en un sandbox y comprueba la aritmética de
-   las tres funciones puras con estados SRS fabricados a mano:
-     - maestría por módulo (nivel 0-5 + penalización por fallos pendientes)
-     - cola de repaso (vencidas primero, después las de más fallos, con límite)
-     - hábitos (racha por días LOCALES, incluidas semanas con cambio de hora,
-       tarjetas de hoy y precisión global)
-   Más el cableado: ruta /dashboard, script en index.html, precache del
-   service worker y el startSession que consume la cola.
-
-   QUÉ NO ES: no pinta el DOM ni mide el navegador; eso se comprobó aparte.
-
-   Ejecutar desde la raíz:  node tests/dashboard.test.js
-   ===================================================================== */
+/* Ejecuta dashboard.js y el motor real de sesiones con estados sintéticos
+   y controles simulados. Comprueba cálculos, prioridad e identidad al avanzar;
+   no valida el renderizado visual ni interacciones de un navegador. */
 
 const fs = require('fs');
 const vm = require('vm');
