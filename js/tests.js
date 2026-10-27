@@ -1170,7 +1170,7 @@ window.SMR_TESTS = (function () {
     });
   }
 
-  /* Wiring: un listener delegado por render; cada clic registra UNA
+  /* Wiring: un listener por botón en cada render; cada clic registra UNA
      valoración (scheduleSrs es idempotente por PK question_key) y
      actualiza el estado visual del grupo. Re-valorar sobrescribe la
      entrada { level, due } de la tarjeta (semántica real de
@@ -1192,7 +1192,7 @@ window.SMR_TESTS = (function () {
         });
         /* la tarjeta ya existe (o revive): la acción de quitar vuelve */
         syncSrsDrop(li, li.dataset.srsTest, Number(li.dataset.srsIndex));
-      }, { once: true });
+      });
     });
   }
 
@@ -1208,7 +1208,7 @@ window.SMR_TESTS = (function () {
       testId: '__repaso',
       title: 'Repaso inteligente',
       mode: 'srs',
-      questions: shuffle(questions.slice()),
+      questions: questions.slice(),
       index: 0,
       correct: 0,
       answers: [],

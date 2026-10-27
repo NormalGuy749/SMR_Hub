@@ -226,7 +226,7 @@ check('exportToPDF sin argumentos usa el formulario y reimprime', () => {
   const exam = ctx.SMR.pdfExport.exportToPDF();
   assert(exam.questions.length === 20, 'sin formulario debería generar 20');
   assert(ctx.printCalls === 1, 'print');
-  ctx.SMR.pdfExport.exportToPDF();
+  assert(ctx.SMR.pdfExport.exportToPDF() === exam, 'reimprimir conserva el examen generado');
   assert(ctx.printCalls === 2, 'el segundo print no ocurrió');
 });
 
@@ -253,6 +253,46 @@ check('la vista pinta los controles y engancha el formulario', () => {
   assert(typeof nodes.submit === 'function', 'submit sin listener');
   assert(root.innerHTML.includes(REAL_TEST.title), 'sin opciones de módulo');
   assert(String(nodes['exam-status'].textContent).length > 0, 'sin estado disponible');
+});
+
+check('cada submit usa el formulario actual: módulo, tema, cantidad, alumno y soluciones', () => {
+  const bank = ['A', 'B'].map((id) => ({ id, title: 'Módulo ' + id, questions: [0, 1, 2].map((i) => ({
+    q: id + '-pregunta-' + i, options: ['sí', 'no'], correct: 0,
+    topic: i === 2 ? 'Otro' : 'Tema ' + id, explain: 'Explicación ' + id
+  })) }));
+  const ctx = load({ bank });
+  const controls = {};
+  for (const [id, value] of Object.entries({
+    'exam-module': 'A', 'exam-topic': 'all', 'exam-count': '1',
+    'exam-student': 'Ana', 'exam-solutions': '', 'exam-form': '', 'exam-status': ''
+  })) {
+    controls[id] = Object.assign(new EventTarget(), { id, value, checked: true, innerHTML: '' });
+    ctx.document.body.appendChild(controls[id]);
+  }
+  const root = { innerHTML: '', querySelector: (sel) => controls[sel.slice(1)] };
+  ctx.SMR.pdfExport.render(root);
+  controls['exam-form'].dispatchEvent(new Event('submit', { cancelable: true }));
+  const first = ctx.document.getElementById('exam-print-view').innerHTML;
+  assert(first.includes('Módulo A') && first.includes('<dd>Ana</dd>'), 'primera configuración');
+  assert((first.match(/class="question-block"/g) || []).length === 1, 'primera cantidad');
+  assert(first.includes('class="exam-solutions"'), 'primer examen con soluciones');
+
+  controls['exam-module'].value = 'B';
+  controls['exam-module'].dispatchEvent(new Event('change'));
+  controls['exam-topic'].value = 'Tema B';
+  controls['exam-topic'].dispatchEvent(new Event('change'));
+  controls['exam-count'].value = '2';
+  controls['exam-count'].dispatchEvent(new Event('input'));
+  controls['exam-student'].value = 'Luis';
+  controls['exam-solutions'].checked = false;
+  controls['exam-form'].dispatchEvent(new Event('submit', { cancelable: true }));
+  const second = ctx.document.getElementById('exam-print-view').innerHTML;
+  assert(second.includes('Módulo B') && !second.includes('Módulo A'), 'el segundo PDF debe usar el módulo actual');
+  assert(second.includes('Tema B') && !second.includes('B-pregunta-2'), 'filtro de tema actual');
+  assert((second.match(/class="question-block"/g) || []).length === 2, 'cantidad actual');
+  assert(second.includes('<dd>Luis</dd>') && !second.includes('<dd>Ana</dd>'), 'alumno actual');
+  assert(!second.includes('class="exam-solutions"'), 'soluciones desactivadas');
+  assert(ctx.printCalls === 2, 'una impresión por submit');
 });
 
 console.log('\ncableado');

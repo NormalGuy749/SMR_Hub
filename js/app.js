@@ -1331,6 +1331,8 @@ function relatedChips(items, { icon = 'chevronRight', accent = false } = {}) {
 
 /* ---------- Modal de recurso: lección, autoevaluación y navegación ---------- */
 
+SMR.openResource = openResource;
+
 function openResource(id) {
   const r = D.resources.find((x) => x.id === id);
   if (!r) {

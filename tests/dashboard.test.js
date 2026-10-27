@@ -311,5 +311,52 @@ check('startSession rechaza una cola vacía sin tocar el DOM', () => {
   assert(context.__start(null) === false, 'null debe devolver false');
 });
 
+check('dashboard → sesión → siguientes preguntas conserva prioridad e identidad, no el orden del banco', () => {
+  const bank = BANK.map((t) => ({ ...t, questions: t.questions.map((q) => ({ ...q, options: ['sí', 'no'], correct: 0, explain: '' })) }));
+  const context = {
+    console,
+    SMR_DATA: { tests: bank },
+    SMR: { esc: String, icon: () => '', srs: { idOf: fakeIdOf }, progress: { data: state({ srs: {
+      't1:0': { level: 1, due: NOW - HOUR },
+      't1:1': { level: 1, due: NOW - 30 * HOUR },
+      't2:0': { level: 1, due: NOW - 5 * HOUR }
+    } }) } }
+  };
+  context.window = context;
+  vm.createContext(context);
+  vm.runInContext('Math.random = () => 0;', context);
+  vm.runInContext(MODULE, context);
+  vm.runInContext(TESTS_JS, context);
+  let nodes = {}, markup = '';
+  const button = (i) => Object.assign(new EventTarget(), {
+    dataset: { i: String(i) }, classList: { add() {} }, setAttribute() {}, focus() {}
+  });
+  // shortcut: controles simulados; los dos módulos y el avance de sesión son reales.
+  const root = {
+    set innerHTML(value) { markup = value; nodes = {}; },
+    get innerHTML() { return markup; },
+    querySelector(sel) { return nodes[sel] || (nodes[sel] = button()); },
+    querySelectorAll(sel) {
+      if (sel === '.quiz-option') return nodes.options || (nodes.options = [button(0), button(1)]);
+      return [];
+    }
+  };
+  const dash = context.SMR.dashboard;
+  const queue = dash.getSmartReviewQueue();
+  assert(queue.map((c) => c.origIndex + '@' + c.testId).join(',') === '1@t1,0@t2,0@t1', 'prioridad de entrada');
+  const originalBank = JSON.stringify(bank);
+  dash.render(root);
+  root.querySelector('#dash-start').dispatchEvent(new Event('click'));
+  queue.forEach((candidate, i) => {
+    assert(root.innerHTML.includes('<h3 class="quiz-q">' + candidate.q.q + '</h3>'), 'pregunta fuera de orden en posición ' + i);
+    assert(root.innerHTML.includes('data-srs-test="' + candidate.testId + '" data-srs-index="' + candidate.origIndex + '"'), 'identidad original perdida en posición ' + i);
+    if (i + 1 < queue.length) {
+      root.querySelectorAll('.quiz-option')[0].dispatchEvent(new Event('click'));
+      root.querySelector('#quiz-next').dispatchEvent(new Event('click'));
+    }
+  });
+  assert(JSON.stringify(bank) === originalBank, 'el motor no debe alterar el banco');
+});
+
 console.log(`\n${failed ? 'FALLOS: ' + failed + ' · ' : ''}${passed} ok, ${failed} fallos`);
 process.exit(failed ? 1 : 0);

@@ -277,7 +277,7 @@
 
     root.querySelector('#exam-form').addEventListener('submit', (event) => {
       event.preventDefault();
-      const exam = exportToPDF();
+      const exam = exportToPDF(configureExam(readForm()));
       if (!exam.questions.length) status.textContent = 'No hay preguntas con esos filtros.';
     });
 

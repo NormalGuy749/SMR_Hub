@@ -33,25 +33,22 @@ function extractFns(src, markers) {
    DOM mínimo isolado por prueba: raíces anidadas con querySelectorAll
    simple por nombres de clase/atributos, y closest del elemento clicks.
 ------------------------------------------------------------------ */
-  /* Cada botón real de la prueba guarda sus listeners y es disparable. */
+  /* EventTarget respeta once: el mock anterior ocultaba listeners consumidos. */
   function makeBtn(attrs, text) {
     const ds = Object.assign({}, attrs);
-    const listeners = {};
-    const el = {
+    const el = Object.assign(new EventTarget(), {
       dataset: ds, textContent: text,
       classList: {
         toggle(c, v) { if (v) el._active = true; else el._active = false; },
         add(c) { el[c] = true; }
       },
       _active: false,
-      addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
-      click() { (listeners.click || []).forEach((fn) => fn()); },
+      click() { this.dispatchEvent(new Event('click')); },
       closest(sel) { return this._li && sel === '[data-srs-test]' ? this._li : null; },
       setAttribute(k, v) { ds['_attr_' + k] = v; },
       getAttribute(k) { return ds['_attr_' + k] === undefined ? null : ds['_attr_' + k]; },
-      dispatchEvent() {},
       _li: null
-    };
+    });
     return el;
   }
 
@@ -173,11 +170,24 @@ function makeHarness(opts) {
     h.fn.wireSrsRating({ querySelectorAll: () => rates });
     rates[2].click(); /* Lo sabía */
     assert(h.progressMock.scheduleSrsCalls.length === 1, 'una update (2)');
-    rates[0].click(); /* no re-adjunta listener (once:true); mock permite volver a disparar */
-    assert(h.progressMock.scheduleSrsCalls.length >= 1, 're-rate permitido por su listener');
+    rates[0].click();
+    rates[2].click();
+    assert(h.progressMock.scheduleSrsCalls.map((c) => c.rate).join(',') === '2,0,2', 'cada clic de 2 → 0 → 2 debe registrar una valoración');
+    assert(h.progressMock.scheduleSrsCalls.every((c) => c.testId === 't-t1' && c.qIndex === 0), 'identidad de la pregunta');
+    assert(rates[2]._active && !rates[0]._active && !rates[1]._active, 'última valoración activa');
+    assert(rates[2].getAttribute('aria-pressed') === 'true' && rates[0].getAttribute('aria-pressed') === 'false', 'estado accesible actualizado');
     assert(Object.keys(h.srsLocal).length === 1, 'sigue UNA tarjeta (PK question_key)');
+
+    const nextRates = [0, 1, 2].map((rate) => makeBtn({ srsRate: String(rate) }));
+    makeLi('t-t1', 1, nextRates, null);
+    h.fn.wireSrsRating({ querySelectorAll: () => nextRates });
+    nextRates[2].click();
+    nextRates[2].click();
+    assert(h.progressMock.scheduleSrsCalls.length === 5, 'una update por clic, también en la siguiente pregunta');
+    assert(h.progressMock.scheduleSrsCalls.slice(3).every((c) => c.qIndex === 1 && c.rate === 2), 'sin identidad ni guards heredados');
+    assert(Object.keys(h.srsLocal).length === 2, 'una tarjeta por pregunta');
   })();
-  record('re-valoración: no duplica tarjeta; semántica de scheduleSrs preservada');
+  record('re-valoración 2 → 0 → 2 y repetición en otra pregunta: un registro por clic e identidad correcta');
 
   /* --- 2. srsRateHtml muestra tres botones con identidad válida ------ */
   await (async () => {

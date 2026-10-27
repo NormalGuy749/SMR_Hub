@@ -269,6 +269,41 @@ check('I1: las superficies de repaso y navegación siguen completas (estático)'
   ['.filter(Boolean)', 'data-open-res'].forEach((s) => assert(app.indexOf(s) !== -1, 'app.js sin ' + s));
 });
 
+check('I2: SMR.openResource abre el recurso real y conserva el tratamiento de IDs ausentes', () => {
+  const vm = require('vm');
+  const storage = new Map();
+  const ctx = {
+    console, URLSearchParams, SMR_DATA: D,
+    document: { querySelector: () => null },
+    matchMedia: () => ({ matches: false, addEventListener() {} }),
+    localStorage: {
+      getItem: (k) => storage.get(k) || null,
+      setItem: (k, v) => storage.set(k, v),
+      removeItem: (k) => storage.delete(k)
+    }
+  };
+  ctx.window = ctx;
+  const app = fs.readFileSync('js/app.js', 'utf8');
+  const end = app.lastIndexOf('\ninit();');
+  assert(end > 0, 'arranque de app.js no encontrado');
+  // shortcut: DOM simulado sin init; la apertura visual completa requiere navegador.
+  vm.runInNewContext(fs.readFileSync('js/profile.js', 'utf8') + '\n' + app.slice(0, end), ctx);
+  assert(typeof ctx.SMR.openResource === 'function', 'falta el contrato SMR.openResource usado por js/tests.js');
+  assert(ctx.SMR.openResource === ctx.openResource, 'debe reutilizar la apertura existente');
+  const control = { addEventListener() {}, classList: { add() {} } };
+  const box = { innerHTML: '', classList: { add() {} }, querySelector: () => control, querySelectorAll: () => [] };
+  ctx.SMR.modal = { open: (build) => build(box), close() {} };
+  const resource = D.resources[0];
+  ctx.SMR.openResource(resource.id);
+  assert(box.innerHTML.includes(ctx.SMR.esc(resource.title)), 'no se abrió el recurso solicitado');
+  assert(box.innerHTML.includes('data-nav="/recursos"'), 'se conserva la navegación de vuelta');
+  const saved = JSON.parse(storage.get('smrhub:progress'));
+  assert(saved.resources.viewed[resource.id] > 0, 'se conserva el guardado de recurso visitado');
+  ctx.SMR.openResource('r-inexistente-regresion');
+  assert(box.innerHTML.includes('Recurso no disponible'), 'se conserva el fallback de recurso inexistente');
+  assert(storage.get('smrhub:progress') === JSON.stringify(saved), 'un ID ausente no modifica el progreso');
+});
+
 /* ---------- línea base / auto-verificación ---------- */
 
 if (process.argv.indexOf('--update-baseline') !== -1) {
