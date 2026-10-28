@@ -3459,8 +3459,20 @@ function restorePathFrom404() {
 
 function render() {
   const { id, query } = parsePath(currentPath());
+  dom.content.replaceChildren();
+  /* El examen impreso vive fuera de .app y debe retirarse también en un 404. */
+  const printView = document.getElementById('exam-print-view');
+  if (printView) printView.remove();
+  if (window.SMR_TESTS && typeof window.SMR_TESTS.stop === 'function') window.SMR_TESTS.stop();
+  stopStudyClock();
+  studyState.active = false;
   if (!currentRouteId()) {
-    SMR.navigate(pathFor('inicio'), true);
+    setActiveNav(null);
+    dom.pageTitle.textContent = 'Página no encontrada';
+    dom.pageDesc.textContent = 'La dirección solicitada no existe.';
+    updateMetadata({ title: 'Página no encontrada', desc: dom.pageDesc.textContent }, id);
+    dom.content.innerHTML = `<div class="empty"><p class="empty-title">Esta página no existe</p><a class="btn" href="${pathFor('inicio')}">Volver al inicio</a></div>`;
+    closeDrawer();
     return;
   }
   SMR.activeQuery = query;
@@ -3469,14 +3481,6 @@ function render() {
   dom.pageTitle.textContent = route.title;
   dom.pageDesc.textContent = route.desc;
   updateMetadata(route, id);
-  dom.content.replaceChildren();
-  /* El examen impreso vive fuera de .app: al cambiar de vista no puede
-     quedarse ahí, o un Ctrl+P en /tests imprimiría el examen anterior. */
-  const printView = document.getElementById('exam-print-view');
-  if (printView) printView.remove();
-  if (window.SMR_TESTS && typeof window.SMR_TESTS.stop === 'function') window.SMR_TESTS.stop();
-  stopStudyClock();
-  studyState.active = false;
   try {
     route.render(dom.content);
   } catch (err) {

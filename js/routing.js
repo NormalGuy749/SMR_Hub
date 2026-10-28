@@ -1,8 +1,9 @@
 'use strict';
 
 (function () {
-  const basePath = location.protocol === 'file:' ? '/' : new URL('.', document.baseURI).pathname;
+  const basePath = location.protocol === 'file:' ? '/' : new URL('.', typeof document === 'undefined' ? location.href : document.baseURI).pathname;
   const recoveryPrefix = '#smrhub-route=';
+  const routeIds = ['inicio', 'estudio', 'recursos', 'redes', 'sistemas', 'herramientas', 'tests', 'dashboard', 'exportar', 'glosario', 'casos', 'mapa', 'estadisticas', 'curriculo', 'mi-smr', 'configuracion'];
 
   function logicalPath(path) {
     let value = path || '/';
@@ -25,9 +26,13 @@
   function parsePath(path) {
     const url = new URL(logicalPath(path), 'https://smr-hub.pages.dev');
     return {
-      id: (url.pathname.split('/').filter(Boolean)[0] || 'inicio').toLowerCase(),
+      id: (url.pathname.replace(/^\/|\/$/g, '') || 'inicio').toLowerCase(),
       query: url.searchParams
     };
+  }
+
+  function isRoute(path) {
+    return routeIds.includes(parsePath(path).id);
   }
 
   function canonicalizeUrl() {
@@ -41,6 +46,7 @@
 
   function redirectFrom404() {
     if (location.protocol === 'file:' || location.pathname === basePath || location.pathname === basePath + 'index.html') return;
+    if (!isRoute(location.pathname)) return;
     const path = location.pathname + location.search + location.hash;
     location.replace(basePath + recoveryPrefix + encodeURIComponent(path));
   }
@@ -59,6 +65,6 @@
     history.replaceState({}, '', target);
   }
 
-  const SMR = (window.SMR = window.SMR || {});
-  SMR.routing = { basePath, logicalPath, publicPath, parsePath, canonicalizeUrl, redirectFrom404, restorePathFrom404 };
+  const SMR = (globalThis.SMR = globalThis.SMR || {});
+  SMR.routing = { basePath, logicalPath, publicPath, parsePath, isRoute, canonicalizeUrl, redirectFrom404, restorePathFrom404 };
 })();

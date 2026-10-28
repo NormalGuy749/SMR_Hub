@@ -1,5 +1,7 @@
 'use strict';
 
+importScripts('js/routing.js');
+
 /* La shell permite arrancar sin red. Los estáticos propios usan stale-while-
    revalidate; las navegaciones y orígenes externos intentan primero la red.
    La sincronización de datos pertenece a cloud-progress, no al worker.
@@ -8,7 +10,7 @@
 
 const BASE_PATH = new URL('./', self.location.href).pathname;
 const CACHE_PREFIX = 'smr-hub:' + BASE_PATH + ':';
-const CACHE_NAME = CACHE_PREFIX + 'v2';
+const CACHE_NAME = CACHE_PREFIX + 'v3';
 
 /* El directorio del worker es también el ámbito público de la aplicación. */
 const PRECACHE = [
@@ -101,19 +103,17 @@ async function networkFirst(request, useFallbackCache) {
 }
 
 async function navigationFallback(request) {
-  const url = new URL(request.url);
-  if (url.pathname !== BASE_PATH && url.pathname.endsWith('/')) {
-    url.pathname = url.pathname.replace(/\/+$/, '');
-    return Response.redirect(url.href, 301);
-  }
   try {
     return await fetch(request);
   } catch {
+    if (!SMR.routing.isRoute(new URL(request.url).pathname)) {
+      return new Response('Página no encontrada.', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
     /* Cualquier ruta limpia (/tests, /herramientas?tool=raid) se sirve con la
        shell; el router de app.js lee location.pathname y pinta esa vista. */
-    const shell = await caches.match(BASE_PATH + 'index.html');
-    if (shell) return shell;
-    return (await caches.match(BASE_PATH)) || Response.error();
+    const shell = (await caches.match(BASE_PATH)) || (await caches.match(BASE_PATH + 'index.html'));
+    // index.html puede haberse precacheado tras un redirect; la navegación necesita una respuesta nueva.
+    return shell ? new Response(shell.body, { headers: shell.headers }) : Response.error();
   }
 }
 

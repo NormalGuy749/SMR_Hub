@@ -9,6 +9,7 @@ const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
 const { bootRouting } = require('./helpers/routing');
+const { routes, hostingResponse, startServer } = require('./helpers/hosting');
 
 let passed = 0, failed = 0;
 function record(n) { passed++; console.log('  ✓ ' + n); }
@@ -59,8 +60,10 @@ function loadWorker(basePath) {
     addEventListener(type, fn) { events[type] = fn; },
     skipWaiting: async () => {}, clients: { claim: async () => {} }
   };
-  const ctx = { self, caches, URL, Response, fetch: async () => { throw new Error('offline'); } };
-  vm.runInNewContext(SW + '\n;globalThis.state = { CACHE_NAME, PRECACHE, NEVER_CACHE };', ctx);
+  const ctx = { self, location: self.location, caches, URL, Response, fetch: async () => { throw new Error('offline'); } };
+  vm.createContext(ctx);
+  ctx.importScripts = (file) => { assert(file === 'js/routing.js'); vm.runInContext(fs.readFileSync(file, 'utf8'), ctx); };
+  vm.runInContext(SW + '\n;globalThis.state = { CACHE_NAME, PRECACHE, NEVER_CACHE };', ctx);
   return {
     ctx, events, caches, added, deleted, state: ctx.state,
     async lifecycle(type) { let pending; events[type]({ waitUntil(promise) { pending = promise; } }); await pending; },
@@ -168,7 +171,7 @@ check('la cola offline se carga antes que app.js', () => {
 console.log('\nsw.js');
 
 check('versión de caché esperada', () => {
-  assert(loadWorker('/').state.CACHE_NAME === 'smr-hub:/:v2');
+  assert(loadWorker('/').state.CACHE_NAME === 'smr-hub:/:v3');
 });
 
 const PRE_CACHE = loadWorker('/').state.PRECACHE;
@@ -277,24 +280,41 @@ console.log('\njs/offline-store.js');
       await h.lifecycle('install');
       assert(h.added.length === PRE_CACHE.length && h.added.every((url) => url.startsWith(base)), 'precache fuera de base');
       assert(!h.added.some((url) => /404\.html|SMR_Hub\/SMR_Hub\//.test(url)), '404 o prefijo duplicado');
-      for (const route of ['tests', 'herramientas', 'recursos', 'glosario', 'exportar']) {
-        const response = await h.request(entry + route + '?q=1');
-        assert(await response.text() === 'cached:' + base + 'index.html', 'shell offline incorrecta: ' + route);
+      for (const route of Object.keys(routes)) {
+        for (const slash of ['', '/']) {
+          const response = await h.request(entry + route + slash + '?q=1#seccion');
+          assert(response.status === 200 && await response.text() === 'cached:' + base, 'shell offline incorrecta: ' + route);
+        }
       }
-      const redirect = await h.request(entry + 'tests/?mode=srs');
-      assert(redirect.status === 301 && redirect.headers.get('Location') === entry + 'tests?mode=srs', 'barra final offline incorrecta');
+      for (const path of ['no-existe', 'tests/no-existe', 'recursos/subnetting']) {
+        assert((await h.request(entry + path)).status === 404, 'shell 200 para ruta inexistente: ' + path);
+      }
     }
   });
   await check('activate elimina solo cachés propias y migra la v1 de Cloudflare', async () => {
     for (const base of ['/', '/SMR_Hub/']) {
       const h = loadWorker(base);
-      const stale = 'smr-hub:' + base + ':v1';
+      const stale = 'smr-hub:' + base + ':v2';
       const other = 'smr-hub:' + (base === '/' ? '/SMR_Hub/' : '/') + ':v2';
       for (const key of [h.state.CACHE_NAME, stale, other, 'smr-hub-v1', 'otra-app']) await h.caches.open(key);
       await h.lifecycle('activate');
       assert(h.deleted.includes(stale), 'no limpia su versión anterior');
       assert(h.deleted.includes('smr-hub-v1') === (base === '/'), 'migración v1 incorrecta');
       assert(!h.deleted.includes(other) && !h.deleted.includes('otra-app') && !h.deleted.includes(h.state.CACHE_NAME), 'borra cachés ajenas o actuales');
+    }
+  });
+  await check('la shell precacheada tras un redirect vuelve offline como respuesta sin redirect', async () => {
+    const { server, origin } = await startServer();
+    try {
+      const cached = await fetch(origin + '/index.html');
+      assert(cached.redirected, 'falta la redirección real de index.html');
+      const h = loadWorker('/');
+      h.caches.match = async (key) => key === '/index.html' ? cached.clone() : undefined;
+      const response = await h.request('https://smr.test/tests');
+      assert(response.status === 200 && !response.redirected, 'la shell sigue marcada como redirect');
+      assert(await response.text() === HTML, 'se perdió el HTML de la shell');
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
     }
   });
   await check('el worker conserva navegación online, SWR local y red externa', async () => {
@@ -304,6 +324,31 @@ console.log('\njs/offline-store.js');
     assert(await (await h.request('https://smr.test/SMR_Hub/tests')).text() === 'online', 'no usa red en navegación');
     assert(await (await h.request('https://smr.test/SMR_Hub/js/app.js', 'cors', 'script')).text() === 'cached:/SMR_Hub/js/app.js', 'falló SWR local');
     assert(await (await h.request('https://cdn.test/sdk.js', 'cors', 'script')).text() === 'online', 'falló red externa');
+  });
+  await check('hosting + SW: cada ruta llega a 200 o al 404 del mirror sin alternar barras', async () => {
+    for (const hosting of ['cloudflare', 'github']) {
+      const base = hosting === 'github' ? '/SMR_Hub/' : '/';
+      const entry = 'https://smr.test' + base;
+      const h = loadWorker(base);
+      h.ctx.fetch = async (request) => hostingResponse(hosting, request.url);
+      for (const route of Object.keys(routes)) {
+        for (const slash of ['', '/']) {
+          let url = entry + route + slash + '?q=a%20b#seccion';
+          const visited = new Set();
+          let response;
+          do {
+            assert(!visited.has(url), 'bucle: ' + url);
+            visited.add(url);
+            response = await h.request(url);
+            if (response.headers.has('Location')) url = response.headers.get('Location');
+            else break;
+          } while (visited.size < 4);
+          assert(response.status === (hosting === 'github' ? 404 : 200), 'respuesta final incorrecta: ' + url);
+          assert(visited.size <= 2, 'cadena innecesaria: ' + url);
+          assert(url.endsWith('?q=a%20b#seccion'), 'query/hash perdido: ' + url);
+        }
+      }
+    }
   });
   await check('guarda, lee y limpia', async () => {
     const store = loadStore(true);

@@ -269,7 +269,10 @@ check('index.html carga el módulo antes de app.js', () => {
 check('el service worker lo precachea', () => {
   for (const base of ['/', '/SMR_Hub/']) {
     const context = { URL, self: { location: new URL('https://smr.test' + base + 'sw.js'), addEventListener() {} } };
-    const precache = vm.runInNewContext(SW + '\n;PRECACHE', context);
+    context.location = context.self.location;
+    vm.createContext(context);
+    context.importScripts = (file) => vm.runInContext(fs.readFileSync(file, 'utf8'), context);
+    const precache = vm.runInContext(SW + '\n;PRECACHE', context);
     assert(precache.includes(base + 'js/dashboard.js'), 'dashboard fuera del precache: ' + base);
   }
 });

@@ -6,6 +6,7 @@
 const fs = require('fs');
 const vm = require('vm');
 const { bootRouting } = require('./helpers/routing');
+const { routes, hostingResponse } = require('./helpers/hosting');
 
 let passed = 0, failed = 0;
 function record(n) { passed++; console.log('  ✓ ' + n); }
@@ -231,17 +232,14 @@ check('12: no quedan enlaces ni rutas con #/ en la aplicación', () => {
 });
 
 check('13: toda ruta de ROUTES tiene una URL limpia y metadatos', () => {
-  const bloque = slice('const ROUTES = {', 'const NAV_GROUPS');
-  const context = { window: {}, SMR: ROOT.ctx.SMR };
-  for (const match of bloque.matchAll(/render:\s*(render\w+)/g)) context[match[1]] = () => {};
-  const routes = vm.runInNewContext(bloque + '\n;ROUTES', context);
   const ids = Object.keys(routes);
   assert(ids.length >= 14, 'se esperaban al menos 14 rutas, hay ' + ids.length);
   ids.forEach((id) => {
     assert(routes[id].title && routes[id].keywords.length, 'sin metadatos: ' + id);
     assert(parsePath(SITE.pathFor(id)).id === id, 'ruta no reversible: ' + id);
-    const rules = fs.readFileSync('_redirects', 'utf8').trim().split(/\r?\n/).map((line) => line.trim().split(/\s+/));
-    assert(rules.some(([from, to, code]) => from === '/' + id && to === '/index.html' && code === '200'), 'ruta sin rewrite: ' + id);
+    assert(ROOT.routing.isRoute(SITE.pathFor(id)), 'ruta no reconocida por 404/SW: ' + id);
+    const response = hostingResponse('cloudflare', DOMINIO + '/' + id);
+    assert(response.status === 200 && !response.headers.has('Location'), 'entrada directa inestable: ' + id);
   });
   assert(SITE.SITE_ORIGIN === DOMINIO, 'SITE_ORIGIN no coincide con el dominio canónico: ' + SITE.SITE_ORIGIN);
 });
@@ -314,12 +312,39 @@ check('17: assets, enlaces, sitemap y canonical permanecen dentro de su contrato
     assert(sitemap.includes('<loc>' + DOMINIO + '/' + route + '</loc>'), 'sitemap incoherente: ' + route);
   }
   assert(fs.readFileSync('robots.txt', 'utf8').includes('Sitemap: ' + DOMINIO + '/sitemap.xml'), 'robots apunta al mirror');
-  const rules = fs.readFileSync('_redirects', 'utf8').trim().split(/\r?\n/).map((line) => line.trim().split(/\s+/));
-  for (const route of ['tests', 'herramientas', 'recursos', 'glosario', 'exportar']) {
-    assert(rules.some(([from, to, code]) => from === '/' + route && to === '/index.html' && code === '200'), 'sin rewrite de ruta: ' + route);
-    assert(rules.some(([from, to, code]) => from === '/' + route + '/' && to === '/' + route && code === '301'), 'sin normalización de barra final: ' + route);
+});
+
+check('18: Cloudflare normaliza cada ruta una vez y deja assets, consultas y 404 intactos', () => {
+  for (const id of Object.keys(routes)) {
+    for (const suffix of ['', '/']) {
+      const url = new URL(DOMINIO + '/' + id + suffix + '?q=a%20b#seccion');
+      let response = hostingResponse('cloudflare', url);
+      if (suffix) {
+        assert(response.status === 301, 'sin normalización: ' + url);
+        const target = new URL(response.headers.get('Location'));
+        assert(target.pathname === '/' + id && target.search === url.search && target.hash === url.hash, 'se pierde ruta/query/hash');
+        response = hostingResponse('cloudflare', target);
+      }
+      assert(response.status === 200 && !response.headers.has('Location'), 'ruta no termina en 200: ' + url);
+    }
   }
-  assert(rules.every(([from]) => !from.includes('*')), 'un catch-all puede interceptar assets');
+  for (const file of ['js/routing.js', 'js/app.js', 'css/app.css', 'assets/brand/SMR.png', 'manifest.json', 'js/cloud-config.public']) {
+    const response = hostingResponse('cloudflare', DOMINIO + '/' + file);
+    assert(response.status === 200 && !response.headers.get('Content-Type').includes('text/html'), 'asset interceptado: ' + file);
+  }
+  for (const hosting of ['cloudflare', 'github']) {
+    const base = hosting === 'github' ? '/SMR_Hub/' : '/';
+    for (const path of ['no-existe', 'tests/no-existe', 'recursos/subnetting', 'assets/no-existe.js']) {
+      const url = DOMINIO + base + path + '?q=1#seccion';
+      assert(hostingResponse(hosting, url).status === 404, 'ruta inexistente no es 404: ' + url);
+      const h = bootRouting(fs.readFileSync('404.html', 'utf8'), url.replace(DOMINIO, hosting === 'github' ? 'https://normalguy749.github.io' : DOMINIO));
+      h.routing.redirectFrom404();
+      assert(h.replacements.length === 0, 'el 404 recupera una ruta inexistente: ' + path);
+      assert(!h.routing.isRoute(new URL(url).pathname), 'subruta aceptada: ' + path);
+    }
+  }
+  const old = fs.readFileSync('_redirects', 'utf8').replace(/ \/ 200/g, ' /index.html 200');
+  assert(hostingResponse('cloudflare', DOMINIO + '/tests', old).status === 308, 'el simulador no reproduce el fallo original');
 });
 
 console.log('\nOK: ' + passed + ' FAIL: ' + failed);
