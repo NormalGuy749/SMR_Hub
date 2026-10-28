@@ -293,7 +293,7 @@ Añadido en esta fase: `tests/srs-review-drop.test.js` (nuevo) y la edición de 
 Sin commit, push, deploy ni migraciones remotas.
 
 **Auditoría de integración (lo comprobado en el código real):**
-1. Se entra al repaso SRS desde el panel «Repasos SRS» del índice (`href="#/tests?mode=srs"`)
+1. Se entra al repaso SRS desde el panel «Repasos SRS» del índice (`href="/tests?mode=srs"`)
    o por la ruta directa; `render()` → `buildSrsSession()` (fase previa).
 2. Cada tarjeta es `session.questions[s.index]` con `{ q, origIndex, testId, testTitle,
    category }` (`session.multi = true`, modo `srs`); se pinta en `renderQuestion`.
