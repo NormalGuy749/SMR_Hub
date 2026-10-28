@@ -3,7 +3,7 @@
 <html lang="es" data-theme="light" data-text-size="md" data-animations="on">
 <head>
   <meta charset="UTF-8">
-  <base>
+  <base href="./">
   <script>
     if (location.protocol !== 'file:') {
       const mirror = location.hostname === 'normalguy749.github.io';
@@ -23,6 +23,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/brand/icon-192.png">
   <meta name="description" id="meta-desc" content="Recursos, tests y herramientas para estudiar Sistemas Microinformáticos y Redes.">
+  <meta name="robots" content="index, follow">
   <meta name="keywords" content="SMR Hub, Sistemas Microinformáticos y Redes, tests SMR, recursos FP">
   <link rel="canonical" href="https://smr-hub.pages.dev/">
   <title>SMR Hub — Tests y recursos de Sistemas Microinformáticos y Redes</title>
@@ -102,7 +103,7 @@
       </div>
 
       <nav class="sidebar-nav" aria-label="Secciones">
-        <ul id="nav-list"></ul>
+        <ul id="nav-list"><li><a class="nav-link" href="tests">Tests</a></li><li><a class="nav-link" href="recursos">Recursos</a></li><li><a class="nav-link" href="herramientas">Herramientas</a></li><li><a class="nav-link" href="glosario">Glosario</a></li></ul>
       </nav>
 
       <div class="sidebar-footer">
@@ -124,8 +125,8 @@
         ></button>
 
         <div class="topbar-title">
-          <h1 id="page-title">Inicio</h1>
-          <p id="page-desc"></p>
+          <h1 id="page-title">SMR Hub: estudia Sistemas Microinformáticos y Redes</h1>
+          <p id="page-desc">Recursos, tests y herramientas para estudiar Sistemas Microinformáticos y Redes.</p>
         </div>
 
         <div class="topbar-actions">
@@ -155,7 +156,24 @@
         </div>
       </header>
 
-      <main class="content" id="content" tabindex="-1"></main>
+      <main class="content" id="content" tabindex="-1"><section class="hero">
+      <div class="hero-main">
+        <p class="hero-eyebrow">Plataforma de estudio SMR</p>
+        <h2>Aprende, practica y comprueba lo que sabes</h2>
+        <p>SMR Hub te ayuda a estudiar Sistemas Microinformáticos y Redes con lecciones breves, preguntas explicadas y herramientas para comprobar tus cálculos. Puedes estudiar sin cuenta y guardar el progreso en tu navegador.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="tests">Practicar con tests</a>
+          <a class="btn" href="recursos">Explorar recursos</a>
+          <a class="btn" href="herramientas">Usar herramientas</a>
+          <a class="btn" href="glosario">Consultar el glosario</a>
+        </div>
+      </div>
+    </section>
+    <section class="panel seo-copy" aria-labelledby="home-study">
+      <h2 id="home-study">Del concepto a la práctica</h2>
+      <p>Lee un recurso, resuelve sus ejercicios y comprueba lo aprendido con un test. El catálogo reúne contenidos de redes, sistemas operativos, hardware, seguridad, virtualización, mantenimiento y ofimática.</p>
+      <p>Empieza por <a href="recursos/subnetting">subnetting IPv4</a>: interpreta prefijos, calcula rangos y revisa el resultado con la calculadora de subredes. Para organizar el repaso, abre una <a href="estudio">sesión de estudio guiada</a>.</p>
+    </section></main>
     </div>
   </div>
 
@@ -165,6 +183,7 @@
   <script src="js/curriculum.js" defer></script>
   <script src="js/content.js" defer></script>
   <script src="js/questions.js" defer></script>
+  <script src="js/seo-content.js" defer></script>
   <script src="js/srs.js" defer></script>
   <script src="js/tools.js" defer></script>
   <script src="js/tests.js" defer></script>

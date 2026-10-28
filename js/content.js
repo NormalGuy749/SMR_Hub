@@ -252,7 +252,7 @@
       minutes: 12,
       tags: ['subnetting', 'cidr', 'calculo'],
       content: [
-        'Tabla esencial: /25 → 126 hosts, /26 → 62, /27 → 30, /28 → 14, /29 → 6, /30 → 2. Siempre 2^h − 2 (red y broadcast reservados).',
+        'Tabla esencial: /25 → 126 hosts, /26 → 62, /27 → 30, /28 → 14, /29 → 6, /30 → 2. En estos prefijos, 2^h − 2 (red y broadcast reservados).',
         'El salto de subred es 256 menos el octeto de la máscara extendida: /26 (máscara .192) salta de 64; /28 (.240) salta de 16.',
         'Para ubicar una IP: divide el último octeto entre el salto. 192.168.4.100/26 → 100 ÷ 64 = 1 bloque completo → subred 192.168.4.64, broadcast 192.168.4.127.',
         'Cálculo inverso: ¿cuántos hosts para 50 equipos? El primer prefijo con 2^h − 2 ≥ 50 es /26 (62). Redondea siempre hacia arriba.',
@@ -264,7 +264,7 @@
           'Hosts: /25 126 · /26 62 · /27 30 · /28 14 · /29 6 · /30 2.',
           'Salto = 256 − octeto extendido de la máscara.',
           'Ubicar una IP: división entera del octeto relevante entre el salto.',
-          'Necesidades de hosts → el prefijo más corto que las cubre.'
+          'Necesidades de hosts → el prefijo más largo (bloque más pequeño) que las cubre.'
         ],
         example: '192.168.4.100/26: máscara 255.255.255.192, salto 64. Bloques: .0, .64, .128, .192. La .100 cae en .64; broadcast .127; hosts .65-.126.',
         commonErrors: [

@@ -10,7 +10,7 @@ importScripts('js/routing.js');
 
 const BASE_PATH = new URL('./', self.location.href).pathname;
 const CACHE_PREFIX = 'smr-hub:' + BASE_PATH + ':';
-const CACHE_NAME = CACHE_PREFIX + 'v3';
+const CACHE_NAME = CACHE_PREFIX + 'v4';
 
 /* El directorio del worker es también el ámbito público de la aplicación. */
 const PRECACHE = [
@@ -26,6 +26,7 @@ const PRECACHE = [
   'js/curriculum.js',
   'js/content.js',
   'js/questions.js',
+  'js/seo-content.js',
   'js/srs.js',
   'js/tools.js',
   'js/tests.js',
@@ -112,8 +113,14 @@ async function navigationFallback(request) {
     /* Cualquier ruta limpia (/tests, /herramientas?tool=raid) se sirve con la
        shell; el router de app.js lee location.pathname y pinta esa vista. */
     const shell = (await caches.match(BASE_PATH)) || (await caches.match(BASE_PATH + 'index.html'));
+    if (!shell) return Response.error();
+    // Fija la base antes de la precarga especulativa en rutas offline con barra final.
+    const html = (await shell.text()).replace(/<base\b[^>]*>/, '<base href="' + BASE_PATH + '">');
+    const headers = new Headers(shell.headers);
+    headers.delete('Content-Length');
+    headers.delete('Content-Encoding');
     // index.html puede haberse precacheado tras un redirect; la navegación necesita una respuesta nueva.
-    return shell ? new Response(shell.body, { headers: shell.headers }) : Response.error();
+    return new Response(html, { headers });
   }
 }
 

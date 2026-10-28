@@ -1018,18 +1018,7 @@ function renderHome(root) {
   const hasProgress = g.viewed > 0 || g.testsDone > 0 || g.done > 0;
 
   root.innerHTML = `
-    <section class="hero">
-      <div class="hero-main">
-        <p class="hero-eyebrow">${SMR.icon('layers', 14)} Plataforma de estudio SMR</p>
-        <h2>SMR Hub</h2>
-        <p>Recursos, tests y herramientas para Sistemas Microinformáticos y Redes. Todo se guarda en tu navegador: no necesitas cuenta.</p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="estudio">${SMR.icon('brain', 15)} Modo estudio</a>
-          <a class="btn" href="recursos">${SMR.icon('book', 15)} Explorar recursos</a>
-          <button type="button" class="btn" data-palette>${SMR.icon('search', 15)} Buscar <kbd class="kbd">Ctrl K</kbd></button>
-        </div>
-      </div>
-    </section>
+    ${window.SMR_SEO.home()}
 
     ${next ? `
     <section class="panel continue-panel" aria-label="Continuar estudiando">
@@ -1466,6 +1455,7 @@ function renderRecursos(root) {
   if (urlQ) resState.q = urlQ;
 
   root.innerHTML = `
+    <p class="panel">Aprende a calcular redes, broadcast y rangos de hosts en la <a href="recursos/subnetting">guía de subnetting IPv4 con ejercicios y calculadora</a>.</p>
     <div class="toolbar">
       <input type="search" class="input page-search" id="res-search" placeholder="Buscar recursos"
              aria-label="Buscar recursos" value="${SMR.esc(resState.q)}">
@@ -1622,6 +1612,7 @@ function renderGlosario(root) {
   const cats = [...new Set(D.glossary.map((t) => t.category || 'General'))].sort((a, b) => a.localeCompare(b, 'es'));
 
   root.innerHTML = `
+    ${window.SMR_SEO.glossaryIntro()}
     <div class="toolbar">
       <input type="search" class="input page-search" id="glo-search" placeholder="Buscar término o definición"
              aria-label="Buscar en el glosario" value="${SMR.esc(gloState.q)}">
@@ -1636,7 +1627,7 @@ function renderGlosario(root) {
       <button type="button" class="chip${gloState.favs ? ' active' : ''}" data-glo-favs aria-pressed="${gloState.favs}">Solo favoritos</button>
     </div>
     <p class="count-note" id="glo-count"></p>
-    <ul class="row-list" id="glo-list"></ul>`;
+    <dl class="row-list" id="glo-list"></dl>`;
 
   const searchInput = root.querySelector('#glo-search');
   const catSel = root.querySelector('#glo-cat');
@@ -1658,11 +1649,12 @@ function renderGlosario(root) {
 
     if (!list.length) {
       listEl.innerHTML = `
-        <li><div class="empty">
-          <p class="empty-title">Sin resultados</p>
-          <p class="empty-text">Ningún término coincide con la búsqueda o los filtros.</p>
+        <div class="empty">
+          <dt class="empty-title">Sin resultados</dt>
+          <dd><p class="empty-text">Ningún término coincide con la búsqueda o los filtros.</p>
           <button type="button" class="btn" id="glo-clear">Limpiar filtros</button>
-        </div></li>`;
+          </dd>
+        </div>`;
       listEl.querySelector('#glo-clear').addEventListener('click', () => {
         gloState.q = ''; gloState.letter = 'Todas'; gloState.cat = 'Todas'; gloState.favs = false;
         renderGlosario(root);
@@ -1673,19 +1665,18 @@ function renderGlosario(root) {
     listEl.innerHTML = list.map((t) => {
       const fav = SMR.favorites.has('termino', t.id);
       return `
-        <li class="gloss-item">
-          <div class="gloss-head">
-            <span class="gloss-term">${SMR.esc(t.term)}</span>
+        <div class="gloss-item">
+          ${window.SMR_SEO.termDefinition(t)}
+          <dd class="gloss-links">
             <div class="gloss-actions">
               <span class="badge">${SMR.esc(t.category || 'General')}</span>
               <button type="button" class="icon-btn fav-btn${fav ? ' active' : ''}" data-fav="termino:${t.id}"
                       aria-pressed="${fav}" title="${fav ? 'Quitar de favoritos' : 'Añadir a favoritos'}"
                       aria-label="${fav ? 'Quitar de favoritos' : 'Añadir a favoritos'}">${SMR.icon('star', 15, fav)}</button>
             </div>
-          </div>
-          <p class="gloss-def">${SMR.esc(t.definition)}</p>
-          <p class="gloss-links"><button type="button" class="link-like" data-term="${SMR.esc(t.term)}">Ver ficha completa</button></p>
-        </li>`;
+            <button type="button" class="link-like" data-term="${SMR.esc(t.term)}">Ver ficha completa</button>
+          </dd>
+        </div>`;
     }).join('');
     bindFav(listEl);
 
@@ -3219,7 +3210,8 @@ const titleFor = (route) => (route && route.seoTitle) || (route ? `${route.title
 const ROUTES = {
   inicio: {
     title: 'Inicio',
-    desc: 'Tu panel de estudio de Sistemas Microinformáticos y Redes.',
+    h1: 'SMR Hub: estudia Sistemas Microinformáticos y Redes',
+    desc: 'Recursos, tests y herramientas para estudiar Sistemas Microinformáticos y Redes.',
     keywords: ['SMR Hub', 'Sistemas Microinformáticos y Redes', 'tests SMR', 'recursos FP'],
     seoTitle: 'SMR Hub — Tests y recursos de Sistemas Microinformáticos y Redes',
     icon: 'home',
@@ -3238,6 +3230,15 @@ const ROUTES = {
     keywords: ['recursos SMR', 'apuntes ciclo medio', 'materiales informática'],
     icon: 'book',
     render: renderRecursos
+  },
+  'recursos/subnetting': {
+    title: 'Subnetting IPv4',
+    h1: 'Subnetting IPv4: aprender, practicar y comprobar resultados',
+    seoTitle: 'Ejercicios de subnetting y calculadora IPv4 | SMR Hub',
+    desc: 'Aprende subnetting IPv4 con tablas /25–/30, ejemplos resueltos y ejercicios VLSM. Comprueba redes, broadcast y hosts con las herramientas de SMR Hub.',
+    keywords: ['subnetting IPv4', 'ejercicios subnetting', 'calculadora IPv4', 'VLSM'],
+    icon: 'network',
+    render: (root) => { root.innerHTML = window.SMR_SEO.subnetting(); }
   },
   redes: {
     title: 'Redes',
@@ -3262,7 +3263,9 @@ const ROUTES = {
   },
   tests: {
     title: 'Tests',
-    desc: 'Cuestionarios de autoevaluación por módulo.',
+    h1: 'Tests SMR: preguntas de Sistemas Microinformáticos y Redes',
+    seoTitle: 'Tests SMR: preguntas y práctica por categorías | SMR Hub',
+    desc: 'Practica con tests SMR de redes, sistemas, hardware y seguridad. Revisa explicaciones y configura tus cuestionarios de Sistemas Microinformáticos y Redes.',
     keywords: ['tests SMR', 'cuestionarios', 'autoevaluación'],
     icon: 'clipboard',
     render: (root) => { if (!window.SMR_TESTS) throw new Error('SMR_TESTS no disponible'); window.SMR_TESTS.render(root); }
@@ -3283,7 +3286,9 @@ const ROUTES = {
   },
   glosario: {
     title: 'Glosario',
-    desc: 'Definiciones de los términos técnicos del ciclo.',
+    h1: 'Glosario SMR: términos de informática y redes',
+    seoTitle: 'Glosario SMR de informática y redes | SMR Hub',
+    desc: 'Consulta definiciones de redes, sistemas operativos, hardware y seguridad. Un glosario SMR para entender conceptos y relacionarlos con recursos de estudio.',
     keywords: ['glosario informático', 'términos técnicos'],
     icon: 'bookOpen',
     render: renderGlosario
@@ -3438,6 +3443,7 @@ function updateMetadata(route, id) {
   };
   meta('meta[name="description"]', route.desc);
   meta('meta[name="keywords"]', (route.keywords || []).join(', '));
+  meta('meta[name="robots"]', ['inicio', 'tests', 'glosario', 'recursos', 'herramientas', 'recursos/subnetting'].includes(id) ? 'index, follow' : 'noindex, follow');
   meta('meta[property="og:title"]', title);
   meta('meta[property="og:description"]', route.desc);
   meta('meta[property="og:url"]', url);
@@ -3478,7 +3484,7 @@ function render() {
   SMR.activeQuery = query;
   const route = ROUTES[id];
   setActiveNav(id);
-  dom.pageTitle.textContent = route.title;
+  dom.pageTitle.textContent = route.h1 || route.title;
   dom.pageDesc.textContent = route.desc;
   updateMetadata(route, id);
   try {
@@ -3495,7 +3501,9 @@ function render() {
     SMR.activeQuery = new URLSearchParams();
   }
   closeDrawer();
-  window.scrollTo(0, 0);
+  const anchor = document.getElementById(location.hash.slice(1));
+  if (anchor) anchor.scrollIntoView();
+  else window.scrollTo(0, 0);
 }
 
 SMR.navigate = (path, replace = false) => {

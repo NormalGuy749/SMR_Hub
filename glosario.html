@@ -1,0 +1,202 @@
+
+<!DOCTYPE html>
+<html lang="es" data-theme="light" data-text-size="md" data-animations="on">
+<head>
+  <meta charset="UTF-8">
+  <base href="./">
+  <script>
+    if (location.protocol !== 'file:') {
+      const mirror = location.hostname === 'normalguy749.github.io';
+      const local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      document.querySelector('base').href = mirror || (local && /^\/SMR_Hub(?:\/|$)/.test(location.pathname))
+        ? '/SMR_Hub/' : '/';
+    }
+    // Espera a fijar la base antes de permitir la precarga del módulo.
+    document.write('<script src="js/routing.js"><\/script>');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SMR Hub">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/brand/icon-192.png">
+  <meta name="description" id="meta-desc" content="Consulta definiciones de redes, sistemas operativos, hardware y seguridad. Un glosario SMR para entender conceptos y relacionarlos con recursos de estudio.">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="glosario informático, términos técnicos">
+  <link rel="canonical" href="https://smr-hub.pages.dev/glosario">
+  <title>Glosario SMR de informática y redes | SMR Hub</title>
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SMR Hub">
+  <meta property="og:locale" content="es_ES">
+  <meta property="og:url" content="https://smr-hub.pages.dev/glosario">
+  <meta property="og:title" content="Glosario SMR de informática y redes | SMR Hub">
+  <meta property="og:description" content="Consulta definiciones de redes, sistemas operativos, hardware y seguridad. Un glosario SMR para entender conceptos y relacionarlos con recursos de estudio.">
+  <meta property="og:image" content="https://smr-hub.pages.dev/assets/brand/SMR.png">
+  <meta property="og:image:alt" content="Logotipo de SMR Hub">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Glosario SMR de informática y redes | SMR Hub">
+  <meta name="twitter:description" content="Consulta definiciones de redes, sistemas operativos, hardware y seguridad. Un glosario SMR para entender conceptos y relacionarlos con recursos de estudio.">
+  <meta name="twitter:image" content="https://smr-hub.pages.dev/assets/brand/SMR.png">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "SMR Hub",
+    "url": "https://smr-hub.pages.dev/",
+    "description": "Recursos, tests y herramientas para estudiar Sistemas Microinformáticos y Redes.",
+    "inLanguage": "es"
+  }
+  </script>
+  <link rel="icon" type="image/png" href="assets/brand/SMR.png">
+
+  <script>
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem('smrhub:settings') || '{}');
+        var dark = s.theme
+          ? s.theme === 'dark'
+          : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var root = document.documentElement;
+
+        root.dataset.theme = dark ? 'dark' : 'light';
+        if (s.textSize) root.dataset.textSize = s.textSize;
+        if (s.animations === false) root.dataset.animations = 'off';
+      } catch (e) {
+        /* Las preferencias son opcionales. */
+      }
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/phase7.css">
+  <link rel="stylesheet" href="css/print.css">
+</head>
+
+<body>
+  <a class="skip-link" href="#content">Saltar al contenido</a>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="Barra lateral">
+      <div class="sidebar-brand">
+        <a class="brand-link" href="./">
+          <img
+            class="brand-logo"
+            src="assets/brand/SMR.png"
+            alt=""
+            width="28"
+            height="28"
+            onload="this.classList.add('is-loaded')"
+            onerror="this.remove()"
+          >
+          <span class="brand-word">SMR Hub</span>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Secciones">
+        <ul id="nav-list"><li><a class="nav-link" href="tests">Tests</a></li><li><a class="nav-link" href="recursos">Recursos</a></li><li><a class="nav-link" href="herramientas">Herramientas</a></li><li><a class="nav-link" href="glosario">Glosario</a></li></ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <ul id="nav-footer"></ul>
+      </div>
+    </aside>
+
+    <div class="scrim" id="scrim" hidden></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button
+          class="icon-btn menu-btn"
+          id="menu-btn"
+          type="button"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="sidebar"
+        ></button>
+
+        <div class="topbar-title">
+          <h1 id="page-title">Glosario SMR: términos de informática y redes</h1>
+          <p id="page-desc">Consulta definiciones de redes, sistemas operativos, hardware y seguridad. Un glosario SMR para entender conceptos y relacionarlos con recursos de estudio.</p>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="search" id="search" role="search">
+            <span class="search-icon" id="search-icon" aria-hidden="true"></span>
+            <input
+              type="search"
+              class="input search-input"
+              id="search-input"
+              placeholder="Buscar"
+              aria-label="Buscar"
+              autocomplete="off"
+              spellcheck="false"
+            >
+            <div class="search-results" id="search-results" hidden></div>
+          </div>
+
+          <button
+            class="icon-btn palette-btn"
+            id="palette-btn"
+            type="button"
+            title="Búsqueda global (Ctrl+K)"
+            aria-label="Abrir búsqueda global (Ctrl+K)"
+          ></button>
+
+          <button class="icon-btn" id="theme-btn" type="button"></button>
+        </div>
+      </header>
+
+      <main class="content" id="content" tabindex="-1"><section class="panel seo-copy" aria-labelledby="glossary-use">
+      <h2 id="glossary-use">Conceptos para entender los recursos de SMR</h2>
+      <p>Consulta 51 términos de redes, sistemas operativos, hardware y seguridad. Cada definición aparece completa en esta página; puedes buscar por término o definición y filtrar por letra o categoría.</p>
+      <p>Relaciona los conceptos con los <a href="recursos">recursos de estudio</a> y comprueba su aplicación en los <a href="tests">tests SMR</a>. Para practicar direccionamiento, consulta la <a href="recursos/subnetting">guía de subnetting IPv4</a>.</p>
+    </section><dl class="row-list"><div class="gloss-item"><dt class="gloss-term" id="g-80plus">80 PLUS</dt><dd class="gloss-def">Certificación de eficiencia de fuentes (Bronze a Titanium): más eficiencia significa menos calor, no más potencia.</dd><dd class="gloss-links"><a href="recursos?q=Fuente%20de%20alimentaci%C3%B3n%20y%20refrigeraci%C3%B3n">Estudiar: Fuente de alimentación y refrigeración</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-8021q">802.1Q</dt><dd class="gloss-def">Estándar IEEE que añade a la trama Ethernet una etiqueta de 4 bytes con el identificador de VLAN (1-4094).</dd><dd class="gloss-links"><a href="recursos?q=VLANs%20y%20enlaces%20trunk">Estudiar: VLANs y enlaces trunk</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-acl">ACL</dt><dd class="gloss-def">Lista de control de acceso: entradas por usuario y grupo con permisos concedidos o denegados sobre un recurso, con herencia.</dd><dd class="gloss-links"><a href="recursos?q=Permisos%20y%20sistemas%20de%20archivos%3A%20Linux%20y%20Windows">Estudiar: Permisos y sistemas de archivos: Linux y Windows</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-bootloader">Bootloader</dt><dd class="gloss-def">Programa que carga el kernel al arrancar: Windows Boot Manager o GRUB. Un bootloader roto impide el inicio aunque el disco esté bien.</dd><dd class="gloss-links"><a href="recursos?q=El%20proceso%20de%20arranque%3A%20POST%2C%20UEFI%20y%20bootloader">Estudiar: El proceso de arranque: POST, UEFI y bootloader</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-bsod">BSOD</dt><dd class="gloss-def">Pantalla azul de Windows: el kernel detiene el equipo ante un error grave. El código (por ejemplo MEMORY_MANAGEMENT) orienta el diagnóstico.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-credential-stuffing">Credential stuffing</dt><dd class="gloss-def">Ataque que reutiliza pares usuario-contraseña filtrados de otros sitios, aprovechando que la gente repite contraseñas.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-csma">CSMA/CD</dt><dd class="gloss-def">Mecanismo de Ethernet con hub: escuchar antes de transmitir y detectar colisiones. Histórico desde el switch a nodo completo.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-csv">CSV</dt><dd class="gloss-def">Formato de texto con valores separados por comas o punto y coma: universal para intercambiar tablas, sin formatos ni fórmulas.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-link-local">Dirección link-local</dt><dd class="gloss-def">Dirección fe80::/10 que toda interfaz IPv6 se autoasigna; válida solo en el enlace local, no enrutable.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-dominio-difusion">Dominio de difusión</dt><dd class="gloss-def">Área de red donde llega un broadcast. Lo separan routers y VLANs; los switches solo separan dominios de colisión.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-fibra">Fibra óptica</dt><dd class="gloss-def">Medio que transmite luz. Inmune a interferencias electromagnéticas; multimodo para cortas distancias y monomodo para kilómetros.</dd><dd class="gloss-links"><a href="recursos?q=Topolog%C3%ADas%20y%20medios%20de%20transmisi%C3%B3n">Estudiar: Topologías y medios de transmisión</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-gusano">Gusano</dt><dd class="gloss-def">Malware que se replica a sí mismo por la red sin intervención del usuario, a diferencia del virus que necesita huésped.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-hash">Hash</dt><dd class="gloss-def">Resumen criptográfico de longitud fija no reversible (SHA-256) usado para verificar integridad y guardar contraseñas con sal.</dd><dd class="gloss-links"><a href="recursos?q=Cifrado%2C%20hash%20y%20seguridad%20Wi-Fi">Estudiar: Cifrado, hash y seguridad Wi-Fi</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-hilo">Hilo</dt><dd class="gloss-def">Unidad de ejecución dentro de un proceso que comparte su memoria. SMT ejecuta dos hilos por núcleo físico.</dd><dd class="gloss-links"><a href="recursos?q=Memoria%20virtual%20y%20gesti%C3%B3n%20de%20procesos">Estudiar: Memoria virtual y gestión de procesos</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-icmp">ICMP</dt><dd class="gloss-def">Protocolo de señalización de IP: eco (ping), destino inalcanzable, tiempo excedido. Herramienta de diagnóstico, no de datos.</dd><dd class="gloss-links"><a href="recursos?q=Diagn%C3%B3stico%20de%20red%3A%20ICMP%20y%20herramientas">Estudiar: Diagnóstico de red: ICMP y herramientas</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-ipc">IPC</dt><dd class="gloss-def">Instrucciones por ciclo: cuánto trabajo hace el procesador en cada ciclo de reloj. El IPC crece con cada arquitectura nueva.</dd><dd class="gloss-links"><a href="recursos?q=Diagn%C3%B3stico%20de%20red%3A%20ICMP%20y%20herramientas">Estudiar: Diagnóstico de red: ICMP y herramientas</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-ipv6">IPv6</dt><dd class="gloss-def">Protocolo de dirección de 128 bits en notación hexadecimal con :: como compresión. Elimina la necesidad de NAT y el broadcast.</dd><dd class="gloss-links"><a href="recursos?q=Introducci%C3%B3n%20a%20IPv6">Estudiar: Introducción a IPv6</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-keylogger">Keylogger</dt><dd class="gloss-def">Malware o dispositivo que registra las pulsaciones de teclado para capturar credenciales. MFA mitiga su daño.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-lan">LAN</dt><dd class="gloss-def">Red local de alcance de edificio. Alta velocidad, propiedad privada y sin operadores intermedios.</dd><dd class="gloss-links"><a href="recursos?q=Topolog%C3%ADas%20y%20medios%20de%20transmisi%C3%B3n">Estudiar: Topologías y medios de transmisión</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-m2">M.2</dt><dd class="gloss-def">Formato de conectores pequeños para SSD; puede ser SATA o NVMe según el modelo y el soporte de la placa.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-memoria-virtual">Memoria virtual</dt><dd class="gloss-def">Abstracción que da a cada proceso su propio espacio de direcciones y permite usar disco (swap) como ampliación de la RAM.</dd><dd class="gloss-links"><a href="recursos?q=Memoria%20virtual%20y%20gesti%C3%B3n%20de%20procesos">Estudiar: Memoria virtual y gestión de procesos</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-osi">Modelo OSI</dt><dd class="gloss-def">Modelo de referencia de siete capas (física, enlace, red, transporte, sesión, presentación y aplicación) que describe cómo viajan los datos y sirve de mapa para diagnosticar.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-nvme">NVMe</dt><dd class="gloss-def">Protocolo de almacenamiento sobre PCIe con colas paralelas: multiplican la velocidad frente a SATA.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-ods">ODS</dt><dd class="gloss-def">Formato abierto de hoja de cálculo (OpenDocument) usado por LibreOffice, compatible con las suites principales.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-pasta-termica">Pasta térmica</dt><dd class="gloss-def">Compuesto que llena las microimperfecciones entre CPU y disipador. Se seca con los años: renovarla cada 2-3 años baja temperaturas.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-pat">PAT</dt><dd class="gloss-def">Traducción de direcciones con puertos (NAT sobrecargado): varias IPs internas comparten una pública distinguiendo cada conexión por su puerto.</dd><dd class="gloss-links"><a href="recursos?q=Routing%20y%20NAT">Estudiar: Routing y NAT</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-pcie">PCIe</dt><dd class="gloss-def">Bus de expansión serie por líneas (lanes): GPU, NVMe y tarjetas compiten por el ancho de banda disponible.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-minimo-privilegio">Principio de mínimo privilegio</dt><dd class="gloss-def">Cada usuario y proceso debe operar solo con los permisos estrictamente necesarios; limita el daño de un compromiso.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-punto-restauracion">Punto de restauración</dt><dd class="gloss-def">Instantánea del registro y archivos del sistema que permite deshacer cambios recientes sin tocar los documentos personales.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-host-only">Red host-only</dt><dd class="gloss-def">Modo de red virtual que conecta las VMs solo con el anfitrión, sin salida exterior: ideal para entornos de prueba aislados.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-aio">Refrigeración líquida (AIO)</dt><dd class="gloss-def">Disipador de circuito cerrado con bomba y radiador: más capacidad térmica que aire en CPUs de alto TDP.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-registro-a">Registro A</dt><dd class="gloss-def">Registro DNS que asocia un nombre de dominio con una dirección IPv4; AAAA hace lo propio con IPv6.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-ruta-defecto">Ruta por defecto</dt><dd class="gloss-def">Ruta 0.0.0.0/0 que captura todo destino sin ruta más específica; la puerta habitual hacia internet.</dd><dd class="gloss-links"><a href="recursos?q=Routing%20y%20NAT">Estudiar: Routing y NAT</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-sal">Sal (criptografía)</dt><dd class="gloss-def">Valor aleatorio único que se añade a cada contraseña antes de aplicar el hash, inutilizando tablas precalculadas.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-shell">Shell</dt><dd class="gloss-def">Intérprete que traduce comandos al kernel: bash y zsh en Linux, CMD y PowerShell en Windows.</dd><dd class="gloss-links"><a href="recursos?q=L%C3%ADnea%20de%20comandos%3A%20CMD%2C%20PowerShell%20y%20Bash">Estudiar: Línea de comandos: CMD, PowerShell y Bash</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-slaac">SLAAC</dt><dd class="gloss-def">Autoconfiguración de direcciones IPv6 sin servidor: el equipo genera su dirección a partir del anuncio del router.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-smt">SMT</dt><dd class="gloss-def">Multihilo simultáneo (Hyper-Threading en Intel): dos hilos por núcleo compartiendo recursos, con ganancia parcial de rendimiento.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-socket">Socket</dt><dd class="gloss-def">Punto de comunicación definido por la pareja dirección IP y puerto (192.168.1.10:443). Identifica el extremo de una conexión.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-spear-phishing">Spear phishing</dt><dd class="gloss-def">Phishing dirigido con datos reales de la víctima (nombre, cargo, proyectos): mucho más creíble que el masivo.</dd><dd class="gloss-links"><a href="recursos?q=Ingenier%C3%ADa%20social%20y%20phishing">Estudiar: Ingeniería social y phishing</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-swap">Swap</dt><dd class="gloss-def">Espacio de disco donde el kernel guarda páginas poco usadas cuando falta RAM (pagefile.sys en Windows). Abusar de él provoca lentitud.</dd><dd class="gloss-links"><a href="recursos?q=Memoria%20virtual%20y%20gesti%C3%B3n%20de%20procesos">Estudiar: Memoria virtual y gestión de procesos</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-syslog">Syslog</dt><dd class="gloss-def">Estándar de envío de mensajes de registro, local o a un recolector central por UDP/TCP 514.</dd><dd class="gloss-links"><a href="recursos?q=Registros%2C%20restauraci%C3%B3n%20y%20recuperaci%C3%B3n%20del%20sistema">Estudiar: Registros, restauración y recuperación del sistema</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-thermal-throttling">Thermal throttling</dt><dd class="gloss-def">Reducción automática de frecuencia al superarse la temperatura de seguridad. Síntoma: rendimiento que cae tras minutos de carga.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-tld">TLD</dt><dd class="gloss-def">Dominio de nivel superior de la jerarquía DNS (.es, .com, .org), gestionado por el registro correspondiente.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-tracert">Traceroute</dt><dd class="gloss-def">Herramienta que revela el camino de routers hasta un destino incrementando el TTL; en Windows se llama tracert.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-trunk">Trunk</dt><dd class="gloss-def">Enlace entre switches que transporta varias VLANs etiquetadas con 802.1Q.</dd><dd class="gloss-links"><a href="recursos?q=VLANs%20y%20enlaces%20trunk">Estudiar: VLANs y enlaces trunk</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-utp">UTP</dt><dd class="gloss-def">Cable de pares trenzados sin apantallar, el medio local más común. Máximo 100 m por tramo; Cat6a soporta 10 Gbps.</dd><dd class="gloss-links"><a href="recursos?q=Topolog%C3%ADas%20y%20medios%20de%20transmisi%C3%B3n">Estudiar: Topologías y medios de transmisión</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-vram">VRAM</dt><dd class="gloss-def">Memoria dedicada de la tarjeta gráfica; su cantidad limita resoluciones, texturas y cálculos paralelos.</dd><dd class="gloss-links"><a href="recursos?q=GPU%20y%20salidas%20de%20v%C3%ADdeo">Estudiar: GPU y salidas de vídeo</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-vrm">VRM</dt><dd class="gloss-def">Circuito de la placa que alimenta al procesador con tensión estable; su calidad condiciona overclocking y estabilidad.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-wan">WAN</dt><dd class="gloss-def">Red de área amplia que conecta LANs entre ciudades o países, normalmente mediante servicios de operadores.</dd><dd class="gloss-links"><a href="recursos?q=Topolog%C3%ADas%20y%20medios%20de%20transmisi%C3%B3n">Estudiar: Topologías y medios de transmisión</a></dd></div><div class="gloss-item"><dt class="gloss-term" id="g-winre">WinRE</dt><dd class="gloss-def">Entorno de recuperación de Windows: reparación de inicio, restauración, consola de comandos y opciones avanzadas.</dd></div><div class="gloss-item"><dt class="gloss-term" id="g-wpa3">WPA3</dt><dd class="gloss-def">Estándar de seguridad Wi-Fi con SAE: resistente a ataques de diccionario y confidencialidad forward, sucesor de WPA2.</dd><dd class="gloss-links"><a href="recursos?q=Cifrado%2C%20hash%20y%20seguridad%20Wi-Fi">Estudiar: Cifrado, hash y seguridad Wi-Fi</a></dd></div></dl></main>
+    </div>
+  </div>
+
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Navegación principal"></nav>
+
+  <script src="js/data.js" defer></script>
+  <script src="js/curriculum.js" defer></script>
+  <script src="js/content.js" defer></script>
+  <script src="js/questions.js" defer></script>
+  <script src="js/seo-content.js" defer></script>
+  <script src="js/srs.js" defer></script>
+  <script src="js/tools.js" defer></script>
+  <script src="js/tests.js" defer></script>
+  <script src="js/pdf-export.js" defer></script>
+  <script src="js/dashboard.js" defer></script>
+  <script src="js/profile.js" defer></script>
+  <script src="js/offline-store.js" defer></script>
+  <script src="js/app.js" defer></script>
+
+  <!-- Carga la configuración pública antes de los scripts defer de Supabase. -->
+  <script>
+    (function () {
+      var configSrc = window.location.hostname === 'normalguy749.github.io'
+        ? 'https://smr-hub.pages.dev/js/cloud-config.public'
+        : 'js/cloud-config.public';
+
+      document.write('<script src="' + configSrc + '"><\/script>');
+    })();
+  </script>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script defer src="js/cloud-config.js"></script>
+  <script defer src="js/supabase.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/cloud-profile.js"></script>
+  <script defer src="js/cloud-progress.js"></script>
+  <script defer src="js/cloud-feedback.js"></script>
+</body>
+</html>

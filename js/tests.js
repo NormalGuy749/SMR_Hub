@@ -362,6 +362,7 @@ window.SMR_TESTS = (function () {
     const history = [...progress().data.tests.history].reverse().slice(0, 4);
 
     root.innerHTML = `
+      ${window.SMR_SEO.testsIntro()}
       <p class="count-note">${tests.length} tests · ${totalQuestions} preguntas · tu historial y mejores puntuaciones se guardan en este navegador</p>
       ${notice ? `<p class="notice">${esc(notice)}</p>` : ''}
 

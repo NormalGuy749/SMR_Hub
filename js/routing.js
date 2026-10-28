@@ -3,7 +3,7 @@
 (function () {
   const basePath = location.protocol === 'file:' ? '/' : new URL('.', typeof document === 'undefined' ? location.href : document.baseURI).pathname;
   const recoveryPrefix = '#smrhub-route=';
-  const routeIds = ['inicio', 'estudio', 'recursos', 'redes', 'sistemas', 'herramientas', 'tests', 'dashboard', 'exportar', 'glosario', 'casos', 'mapa', 'estadisticas', 'curriculo', 'mi-smr', 'configuracion'];
+  const routeIds = ['inicio', 'estudio', 'recursos', 'recursos/subnetting', 'redes', 'sistemas', 'herramientas', 'tests', 'dashboard', 'exportar', 'glosario', 'casos', 'mapa', 'estadisticas', 'curriculo', 'mi-smr', 'configuracion'];
 
   function logicalPath(path) {
     let value = path || '/';

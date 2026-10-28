@@ -45,7 +45,7 @@ const parsePath = ROOT.routing.parsePath;
 
 function fakeDoc() {
   const sels = [
-    'meta[name="description"]', 'meta[name="keywords"]',
+    'meta[name="description"]', 'meta[name="keywords"]', 'meta[name="robots"]',
     'meta[property="og:title"]', 'meta[property="og:description"]', 'meta[property="og:url"]',
     'meta[name="twitter:title"]', 'meta[name="twitter:description"]',
     'link[rel="canonical"]'
@@ -250,7 +250,7 @@ check('14: ambas bases generan y parsean rutas sin duplicar el prefijo', () => {
     const h = bootRouting(HTML, entry + 'tests/');
     const base = new URL(entry).pathname;
     assert(h.routing.basePath === base, 'base incorrecta: ' + entry);
-    for (const id of ['tests', 'herramientas', 'recursos', 'glosario', 'exportar']) {
+    for (const id of ['tests', 'herramientas', 'recursos', 'glosario', 'exportar', 'recursos/subnetting']) {
       const path = h.routing.publicPath('/' + id + '?q=a%20b#seccion');
       assert(path === base + id + '?q=a%20b#seccion', path);
       assert(h.routing.publicPath(path) === path, 'prefijo duplicado: ' + path);
@@ -308,7 +308,7 @@ check('17: assets, enlaces, sitemap y canonical permanecen dentro de su contrato
     }
   }
   const sitemap = fs.readFileSync('sitemap.xml', 'utf8');
-  for (const route of ['', 'tests', 'herramientas', 'recursos', 'glosario', 'exportar']) {
+  for (const route of ['', 'tests', 'herramientas', 'recursos', 'glosario', 'recursos/subnetting']) {
     assert(sitemap.includes('<loc>' + DOMINIO + '/' + route + '</loc>'), 'sitemap incoherente: ' + route);
   }
   assert(fs.readFileSync('robots.txt', 'utf8').includes('Sitemap: ' + DOMINIO + '/sitemap.xml'), 'robots apunta al mirror');
@@ -334,7 +334,7 @@ check('18: Cloudflare normaliza cada ruta una vez y deja assets, consultas y 404
   }
   for (const hosting of ['cloudflare', 'github']) {
     const base = hosting === 'github' ? '/SMR_Hub/' : '/';
-    for (const path of ['no-existe', 'tests/no-existe', 'recursos/subnetting', 'assets/no-existe.js']) {
+    for (const path of ['no-existe', 'tests/no-existe', 'recursos/no-existe', 'recursos/subnetting/no-existe', 'assets/no-existe.js']) {
       const url = DOMINIO + base + path + '?q=1#seccion';
       assert(hostingResponse(hosting, url).status === 404, 'ruta inexistente no es 404: ' + url);
       const h = bootRouting(fs.readFileSync('404.html', 'utf8'), url.replace(DOMINIO, hosting === 'github' ? 'https://normalguy749.github.io' : DOMINIO));
@@ -344,7 +344,86 @@ check('18: Cloudflare normaliza cada ruta una vez y deja assets, consultas y 404
     }
   }
   const old = fs.readFileSync('_redirects', 'utf8').replace(/ \/ 200/g, ' /index.html 200');
-  assert(hostingResponse('cloudflare', DOMINIO + '/tests', old).status === 308, 'el simulador no reproduce el fallo original');
+  assert(hostingResponse('cloudflare', DOMINIO + '/herramientas', old).status === 308, 'el simulador no reproduce el fallo original');
+});
+
+check('19: las cuatro landings entregan contenido y metadata propia sin ejecutar JavaScript', () => {
+  const { buildPages } = require('../scripts/build-seo');
+  const pages = buildPages();
+  for (const [file, expected] of Object.entries(pages)) {
+    const html = fs.readFileSync(file, 'utf8');
+    assert(html === expected, file + ' desactualizado: node scripts/build-seo.js');
+    const id = file === 'index.html' ? 'inicio' : file.slice(0, -5);
+    const route = routes[id];
+    const url = DOMINIO + '/' + (id === 'inicio' ? '' : id);
+    assert(html.includes('<title>' + route.seoTitle + '</title>'), 'title: ' + file);
+    assert(html.includes('<h1 id="page-title">' + route.h1 + '</h1>'), 'h1: ' + file);
+    assert([...html.matchAll(/<h1[\s>]/g)].length === 1, 'h1 duplicado: ' + file);
+    assert(html.includes('rel="canonical" href="' + url + '"'), 'canonical: ' + file);
+    for (const [attr, key, value] of [['name', 'description', route.desc], ['property', 'og:title', route.seoTitle], ['property', 'og:description', route.desc], ['property', 'og:url', url], ['name', 'twitter:title', route.seoTitle], ['name', 'twitter:description', route.desc]]) {
+      const tag = html.match(new RegExp('<meta[^>]*' + attr + '="' + key + '"[^>]*>'))?.[0];
+      assert(tag && contenido(tag) === value, key + ': ' + file);
+    }
+    const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)[1];
+    assert(main.includes('<section') || main.includes('<article'), 'contenido semántico: ' + file);
+    assert(main.includes('<h2') && main.includes('<p>') && main.length > 700, 'contenido útil: ' + file);
+    assert(main.includes('href="tests') && main.includes('href="recursos'), 'enlaces: ' + file);
+    assert(!/smrhub:|data-fav=|Tu progreso/.test(main), 'datos personales en HTML: ' + file);
+    const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+    assert(new Set(ids).size === ids.length, 'IDs duplicados: ' + file);
+    const response = hostingResponse('cloudflare', url);
+    assert(response.status === 200 && !response.headers.has('Location'), 'landing no llega directamente a 200: ' + url);
+    for (const base of [DOMINIO + '/', 'https://normalguy749.github.io/SMR_Hub/']) {
+      const h = bootRouting(html, base + (id === 'inicio' ? '' : id) + '?q=1#practica');
+      assert(h.routing.parsePath(h.location.pathname).id === id, 'ruta/base: ' + file);
+      assert(h.routing.parsePath(h.location.pathname + h.location.search + h.location.hash).query.get('q') === '1', 'query/hash: ' + file);
+      assert(new URL('js/app.js', h.document.baseURI).href === base + 'js/app.js', 'assets anidados: ' + file);
+    }
+  }
+});
+
+check('20: catálogo, definiciones y ejemplos se derivan de los datos reales sin publicarlos dos veces', () => {
+  const ctx = { console }; ctx.window = ctx; vm.createContext(ctx);
+  for (const file of ['data', 'content', 'questions']) vm.runInContext(fs.readFileSync('js/' + file + '.js', 'utf8'), ctx);
+  const d = ctx.SMR_DATA;
+  const tests = fs.readFileSync('tests.html', 'utf8');
+  for (const t of d.tests) {
+    assert(tests.includes('href="tests?test=' + t.id + '"'), 'test ausente: ' + t.id);
+    assert(tests.includes(t.questions.length + ' preguntas.'), 'contador de test incorrecto');
+  }
+  assert(tests.includes(d.tests.length + ' tests y ' + d.tests.reduce((n, t) => n + t.questions.length, 0) + ' preguntas'), 'totales incorrectos');
+  const glossary = fs.readFileSync('glosario.html', 'utf8');
+  assert([...glossary.matchAll(/<dt\b/g)].length === d.glossary.length, 'definiciones duplicadas o ausentes');
+  const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  for (const t of d.glossary) assert(glossary.includes(esc(t.definition)), 'definición ausente: ' + t.id);
+  const subnet = fs.readFileSync('recursos/subnetting.html', 'utf8');
+  for (let p = 25; p <= 30; p++) {
+    const size = 2 ** (32 - p);
+    assert(subnet.includes('/' + p + '</th><td>255.255.255.' + (256 - size) + '</td><td>' + size + '</td><td>' + (size - 2)), 'tabla incorrecta: /' + p);
+  }
+  for (const id of ['r-red-subnet-intermedio', 'r-red-vlsm-avanzado']) {
+    const r = d.resources.find((r) => r.id === id);
+    for (const text of [r.lesson.example, r.exercise.prompt, r.exercise.solution]) assert(subnet.includes(esc(text)), 'contenido no reutilizado: ' + id);
+  }
+  for (const tool of ['subredes', 'tabla-subredes', 'vlsm']) assert(subnet.includes('href="herramientas?tool=' + tool + '"'), 'herramienta ausente');
+  assert(subnet.includes('/31 punto a punto') && subnet.includes('rfc3021'), 'falta excepción /31');
+});
+
+check('21: sitemap solo publica las seis landings canónicas', () => {
+  const urls = [...fs.readFileSync('sitemap.xml', 'utf8').matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]).sort();
+  const expected = ['', 'tests', 'glosario', 'recursos', 'herramientas', 'recursos/subnetting'].map((id) => DOMINIO + '/' + id).sort();
+  assert(JSON.stringify(urls) === JSON.stringify(expected), 'sitemap con rutas personales, funcionales o mirror');
+});
+
+check('22: robots sigue la ruta actual y vuelve a index al navegar desde una pantalla personal', () => {
+  const doc = fakeDoc();
+  const update = vm.runInNewContext(CORE + METADATA + '\n;updateMetadata', { document: doc, SMR: ROOT.ctx.SMR });
+  const indexable = ['inicio', 'tests', 'glosario', 'recursos', 'herramientas', 'recursos/subnetting'];
+  for (const id of [...indexable, ...Object.keys(routes).filter((id) => !indexable.includes(id)), 'no-existe', ...indexable]) {
+    update(routes[id] || { title: 'Página no encontrada', desc: 'No existe' }, id);
+    assert(doc.els['meta[name="robots"]'].attrs.content === (indexable.includes(id) ? 'index, follow' : 'noindex, follow'), 'robots pegado: ' + id);
+    assert(doc.els['link[rel="canonical"]'].attrs.href === DOMINIO + '/' + (id === 'inicio' ? '' : id), 'canonical incorrecta: ' + id);
+  }
 });
 
 console.log('\nOK: ' + passed + ' FAIL: ' + failed);

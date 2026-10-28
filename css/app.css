@@ -52,6 +52,15 @@ html[data-theme='dark'] .btn-primary { color: #0b1220; }
 }
 
 .panel + .panel { margin-top: 16px; }
+.seo-copy { line-height: 1.7; }
+.seo-copy h2 { margin: 1.4em 0 .6em; font-size: 1.2rem; }
+.seo-copy h2:first-child { margin-top: 0; }
+.seo-copy p, .seo-copy ul, .seo-copy ol, .seo-copy nav, .seo-copy details { margin: .8em 0; }
+.seo-copy ul, .seo-copy ol { padding-left: 1.5em; }
+.seo-copy li + li { margin-top: .5em; }
+.seo-copy a { color: var(--accent); text-decoration: underline; }
+.seo-copy [id] { scroll-margin-top: 100px; }
+.gloss-item dd { margin-left: 0; }
 .home-grid > .panel + .panel { margin-top: 0; }
 .follow-label { margin-top: var(--sp-5); }
 

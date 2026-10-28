@@ -1,0 +1,232 @@
+
+<!DOCTYPE html>
+<html lang="es" data-theme="light" data-text-size="md" data-animations="on">
+<head>
+  <meta charset="UTF-8">
+  <base href="../">
+  <script>
+    if (location.protocol !== 'file:') {
+      const mirror = location.hostname === 'normalguy749.github.io';
+      const local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      document.querySelector('base').href = mirror || (local && /^\/SMR_Hub(?:\/|$)/.test(location.pathname))
+        ? '/SMR_Hub/' : '/';
+    }
+    // Espera a fijar la base antes de permitir la precarga del módulo.
+    document.write('<script src="js/routing.js"><\/script>');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SMR Hub">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/brand/icon-192.png">
+  <meta name="description" id="meta-desc" content="Aprende subnetting IPv4 con tablas /25–/30, ejemplos resueltos y ejercicios VLSM. Comprueba redes, broadcast y hosts con las herramientas de SMR Hub.">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="subnetting IPv4, ejercicios subnetting, calculadora IPv4, VLSM">
+  <link rel="canonical" href="https://smr-hub.pages.dev/recursos/subnetting">
+  <title>Ejercicios de subnetting y calculadora IPv4 | SMR Hub</title>
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SMR Hub">
+  <meta property="og:locale" content="es_ES">
+  <meta property="og:url" content="https://smr-hub.pages.dev/recursos/subnetting">
+  <meta property="og:title" content="Ejercicios de subnetting y calculadora IPv4 | SMR Hub">
+  <meta property="og:description" content="Aprende subnetting IPv4 con tablas /25–/30, ejemplos resueltos y ejercicios VLSM. Comprueba redes, broadcast y hosts con las herramientas de SMR Hub.">
+  <meta property="og:image" content="https://smr-hub.pages.dev/assets/brand/SMR.png">
+  <meta property="og:image:alt" content="Logotipo de SMR Hub">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Ejercicios de subnetting y calculadora IPv4 | SMR Hub">
+  <meta name="twitter:description" content="Aprende subnetting IPv4 con tablas /25–/30, ejemplos resueltos y ejercicios VLSM. Comprueba redes, broadcast y hosts con las herramientas de SMR Hub.">
+  <meta name="twitter:image" content="https://smr-hub.pages.dev/assets/brand/SMR.png">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "SMR Hub",
+    "url": "https://smr-hub.pages.dev/",
+    "description": "Recursos, tests y herramientas para estudiar Sistemas Microinformáticos y Redes.",
+    "inLanguage": "es"
+  }
+  </script>
+  <link rel="icon" type="image/png" href="assets/brand/SMR.png">
+
+  <script>
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem('smrhub:settings') || '{}');
+        var dark = s.theme
+          ? s.theme === 'dark'
+          : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var root = document.documentElement;
+
+        root.dataset.theme = dark ? 'dark' : 'light';
+        if (s.textSize) root.dataset.textSize = s.textSize;
+        if (s.animations === false) root.dataset.animations = 'off';
+      } catch (e) {
+        /* Las preferencias son opcionales. */
+      }
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/phase7.css">
+  <link rel="stylesheet" href="css/print.css">
+</head>
+
+<body>
+  <a class="skip-link" href="#content">Saltar al contenido</a>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="Barra lateral">
+      <div class="sidebar-brand">
+        <a class="brand-link" href="./">
+          <img
+            class="brand-logo"
+            src="assets/brand/SMR.png"
+            alt=""
+            width="28"
+            height="28"
+            onload="this.classList.add('is-loaded')"
+            onerror="this.remove()"
+          >
+          <span class="brand-word">SMR Hub</span>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Secciones">
+        <ul id="nav-list"><li><a class="nav-link" href="tests">Tests</a></li><li><a class="nav-link" href="recursos">Recursos</a></li><li><a class="nav-link" href="herramientas">Herramientas</a></li><li><a class="nav-link" href="glosario">Glosario</a></li></ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <ul id="nav-footer"></ul>
+      </div>
+    </aside>
+
+    <div class="scrim" id="scrim" hidden></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button
+          class="icon-btn menu-btn"
+          id="menu-btn"
+          type="button"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="sidebar"
+        ></button>
+
+        <div class="topbar-title">
+          <h1 id="page-title">Subnetting IPv4: aprender, practicar y comprobar resultados</h1>
+          <p id="page-desc">Aprende subnetting IPv4 con tablas /25–/30, ejemplos resueltos y ejercicios VLSM. Comprueba redes, broadcast y hosts con las herramientas de SMR Hub.</p>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="search" id="search" role="search">
+            <span class="search-icon" id="search-icon" aria-hidden="true"></span>
+            <input
+              type="search"
+              class="input search-input"
+              id="search-input"
+              placeholder="Buscar"
+              aria-label="Buscar"
+              autocomplete="off"
+              spellcheck="false"
+            >
+            <div class="search-results" id="search-results" hidden></div>
+          </div>
+
+          <button
+            class="icon-btn palette-btn"
+            id="palette-btn"
+            type="button"
+            title="Búsqueda global (Ctrl+K)"
+            aria-label="Abrir búsqueda global (Ctrl+K)"
+          ></button>
+
+          <button class="icon-btn" id="theme-btn" type="button"></button>
+        </div>
+      </header>
+
+      <main class="content" id="content" tabindex="-1"><article class="panel seo-copy">
+      <nav aria-label="Ruta de contenido"><a href="./">Inicio</a> / <a href="recursos">Recursos</a> / Subnetting</nav>
+      <h2>Qué es subnetting IPv4</h2>
+      <p>Subnetting divide una red IPv4 en subredes. El prefijo CIDR indica cuántos de los 32 bits identifican la red; los restantes corresponden a las direcciones dentro del bloque. En una /26 quedan 6 bits: 64 direcciones totales y 62 hosts utilizables al reservar red y broadcast.</p>
+      <nav aria-label="En esta guía"><a href="recursos/subnetting#prefijos">Prefijos /25–/30</a> · <a href="recursos/subnetting#procedimiento">Procedimiento</a> · <a href="recursos/subnetting#practica">Práctica</a> · <a href="recursos/subnetting#calculadora">Calculadora</a> · <a href="recursos/subnetting#vlsm">VLSM</a> · <a href="recursos/subnetting#errores">Errores frecuentes</a></nav>
+      <h2 id="prefijos">Tabla de prefijos CIDR /25 a /30</h2>
+      <div class="table-wrap"><table class="port-table">
+        <caption>Subredes IPv4 con red y broadcast reservados</caption>
+        <thead><tr><th scope="col">Prefijo</th><th scope="col">Máscara</th><th scope="col">Direcciones</th><th scope="col">Hosts utilizables</th></tr></thead>
+        <tbody><tr><th scope="row">/25</th><td>255.255.255.128</td><td>128</td><td>126</td></tr><tr><th scope="row">/26</th><td>255.255.255.192</td><td>64</td><td>62</td></tr><tr><th scope="row">/27</th><td>255.255.255.224</td><td>32</td><td>30</td></tr><tr><th scope="row">/28</th><td>255.255.255.240</td><td>16</td><td>14</td></tr><tr><th scope="row">/29</th><td>255.255.255.248</td><td>8</td><td>6</td></tr><tr><th scope="row">/30</th><td>255.255.255.252</td><td>4</td><td>2</td></tr></tbody>
+      </table></div>
+      <p>Para estos prefijos, hosts utilizables = 2<sup>32 − prefijo</sup> − 2. La regla cambia en un <strong>/31 punto a punto</strong>: sus dos direcciones pueden identificar los extremos, sin broadcast dirigido, según la <a href="https://www.rfc-editor.org/rfc/rfc3021.html">RFC 3021</a>. Un /32 identifica una sola dirección.</p>
+      <h2 id="procedimiento">Procedimiento básico y ejemplo /26</h2>
+      <ol><li>El salto de subred es 256 menos el octeto de la máscara extendida: /26 (máscara .192) salta de 64; /28 (.240) salta de 16.</li><li>Para ubicar una IP: divide el último octeto entre el salto. 192.168.4.100/26 → 100 ÷ 64 = 1 bloque completo → subred 192.168.4.64, broadcast 192.168.4.127.</li><li>Cálculo inverso: ¿cuántos hosts para 50 equipos? El primer prefijo con 2^h − 2 ≥ 50 es /26 (62). Redondea siempre hacia arriba.</li><li>¿Cuántas subredes salen de un /24 al /26? 2^(26−24) = 4 subredes de 64 direcciones cada una.</li></ol>
+      <p class="modal-example">192.168.4.100/26: máscara 255.255.255.192, salto 64. Bloques: .0, .64, .128, .192. La .100 cae en .64; broadcast .127; hosts .65-.126.</p>
+      <p>Al dimensionar una subred, elige el prefijo más largo (el bloque más pequeño) que cubra los hosts necesarios.</p>
+      <h2 id="practica">Ejercicios para practicar</h2>
+      <p><strong>¿Qué subred, broadcast y rango de hosts corresponden a 10.0.0.199/28?</strong></p>
+      <details class="exercise-solution"><summary>Comprobar solución</summary><p>Máscara 255.255.255.240, salto 16. Bloques: .192 → subred 10.0.0.192, broadcast 10.0.0.207, hosts de .193 a .206 (14 hosts).</p></details>
+      <p>El <a href="tests?test=t-redes">Test de Redes</a> incluye 9 preguntas de subnetting y VLSM entre sus 27 preguntas. Practicarás hosts, red, broadcast, wildcard y reparto de bloques.</p>
+      <h2 id="calculadora">Comprobar con la calculadora IPv4</h2>
+      <p>Abre la <a href="herramientas?tool=subredes">calculadora de subredes</a> e introduce la IP y el prefijo del ejercicio para comparar red, broadcast, máscara y rango de hosts. La <a href="herramientas?tool=tabla-subredes">tabla de subredes</a> divide una red en bloques iguales.</p>
+      <h2 id="vlsm">VLSM: subredes de distinto tamaño</h2>
+      <p>VLSM reparte una red base en trozos a medida. Regla de oro: asigna siempre primero la subred mayor y continúa de mayor a menor.</p>
+      <ul><li>Ejemplo sobre 192.168.0.0/24 con necesidades 100, 50, 20, 2 y 2 hosts:</li><li>— 100 hosts → /25 (126 útiles): 192.168.0.0/25, rango .1-.126, broadcast .127.</li><li>— 50 hosts → /26 (62): 192.168.0.128/26, rango .129-.190, broadcast .191.</li><li>— 20 hosts → /27 (30): 192.168.0.192/27, rango .193-.222, broadcast .223.</li><li>— 2 hosts → /30 (2): 192.168.0.224/30, rango .225-.226, broadcast .227.</li><li>— 2 hosts → /30: 192.168.0.228/30, rango .229-.230, broadcast .231.</li><li>Cada bloque debe estar alineado a su tamaño: una /26 solo puede empezar en .0, .64, .128 o .192. Por eso el cursor avanza al siguiente múltiplo.</li></ul>
+      <p>El reparto del ejemplo consume hasta .231, dejando .232-.255 libres para futuras ampliaciones de la red.</p>
+      <p><strong>Reparte 192.168.10.0/24 para: aula 60, secretaría 25, enlace 2. Escribe las tres subredes.</strong></p>
+      <details class="exercise-solution"><summary>Comprobar reparto VLSM</summary><p>Aula: 192.168.10.0/26 (.1-.62). Secretaría: 192.168.10.64/27 (.65-.94). Enlace: 192.168.10.96/30 (.97-.98). Libre desde .100.</p></details>
+      <p>Comprueba otro reparto con la <a href="herramientas?tool=vlsm">herramienta VLSM</a>. Usa bloques alineados, sin solapamientos y dentro de la red base.</p>
+      <h2 id="errores">Errores frecuentes</h2>
+      <ul><li>Elegir /28 para 20 hosts: solo ofrece 14; se necesita /27.</li><li>Restar el salto en vez de multiplicar bloques al ubicar la subred.</li><li>Olvidar que la primera y última dirección de cada bloque no son asignables.</li><li>Empezar por las subredes pequeñas: provoca huecos que no caben las grandes.</li><li>Colocar una /26 empezando en .96 (no alineada): se solaparía con otra subred.</li><li>No reservar espacio de crecimiento y tener que renumerar todo después.</li></ul>
+      <h2>Recursos y fuentes para continuar</h2>
+      <p>Esta guía reúne «Subnetting intermedio: /25 a /30» y «VLSM y diseño de redes pequeñas», disponibles en el <a href="recursos?q=subnetting">catálogo de recursos</a>. Puedes abrir sus fichas y registrar tu estudio allí. Continúa con los <a href="tests">tests SMR</a> o consulta el <a href="glosario">glosario</a>.</p>
+      <p>Referencia técnica: <a href="https://www.cisco.com/c/en/us/support/docs/ip/routing-information-protocol-rip/13788-3.html">Cisco: direccionamiento, subredes y VLSM</a>; para enlaces /31, <a href="https://www.rfc-editor.org/rfc/rfc3021.html">RFC 3021</a>.</p>
+    </article></main>
+    </div>
+  </div>
+
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Navegación principal"></nav>
+
+  <script src="js/data.js" defer></script>
+  <script src="js/curriculum.js" defer></script>
+  <script src="js/content.js" defer></script>
+  <script src="js/questions.js" defer></script>
+  <script src="js/seo-content.js" defer></script>
+  <script src="js/srs.js" defer></script>
+  <script src="js/tools.js" defer></script>
+  <script src="js/tests.js" defer></script>
+  <script src="js/pdf-export.js" defer></script>
+  <script src="js/dashboard.js" defer></script>
+  <script src="js/profile.js" defer></script>
+  <script src="js/offline-store.js" defer></script>
+  <script src="js/app.js" defer></script>
+
+  <!-- Carga la configuración pública antes de los scripts defer de Supabase. -->
+  <script>
+    (function () {
+      var configSrc = window.location.hostname === 'normalguy749.github.io'
+        ? 'https://smr-hub.pages.dev/js/cloud-config.public'
+        : 'js/cloud-config.public';
+
+      document.write('<script src="' + configSrc + '"><\/script>');
+    })();
+  </script>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script defer src="js/cloud-config.js"></script>
+  <script defer src="js/supabase.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/cloud-profile.js"></script>
+  <script defer src="js/cloud-progress.js"></script>
+  <script defer src="js/cloud-feedback.js"></script>
+</body>
+</html>

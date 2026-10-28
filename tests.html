@@ -1,0 +1,205 @@
+
+<!DOCTYPE html>
+<html lang="es" data-theme="light" data-text-size="md" data-animations="on">
+<head>
+  <meta charset="UTF-8">
+  <base href="./">
+  <script>
+    if (location.protocol !== 'file:') {
+      const mirror = location.hostname === 'normalguy749.github.io';
+      const local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      document.querySelector('base').href = mirror || (local && /^\/SMR_Hub(?:\/|$)/.test(location.pathname))
+        ? '/SMR_Hub/' : '/';
+    }
+    // Espera a fijar la base antes de permitir la precarga del módulo.
+    document.write('<script src="js/routing.js"><\/script>');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SMR Hub">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/brand/icon-192.png">
+  <meta name="description" id="meta-desc" content="Practica con tests SMR de redes, sistemas, hardware y seguridad. Revisa explicaciones y configura tus cuestionarios de Sistemas Microinformáticos y Redes.">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="tests SMR, cuestionarios, autoevaluación">
+  <link rel="canonical" href="https://smr-hub.pages.dev/tests">
+  <title>Tests SMR: preguntas y práctica por categorías | SMR Hub</title>
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SMR Hub">
+  <meta property="og:locale" content="es_ES">
+  <meta property="og:url" content="https://smr-hub.pages.dev/tests">
+  <meta property="og:title" content="Tests SMR: preguntas y práctica por categorías | SMR Hub">
+  <meta property="og:description" content="Practica con tests SMR de redes, sistemas, hardware y seguridad. Revisa explicaciones y configura tus cuestionarios de Sistemas Microinformáticos y Redes.">
+  <meta property="og:image" content="https://smr-hub.pages.dev/assets/brand/SMR.png">
+  <meta property="og:image:alt" content="Logotipo de SMR Hub">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Tests SMR: preguntas y práctica por categorías | SMR Hub">
+  <meta name="twitter:description" content="Practica con tests SMR de redes, sistemas, hardware y seguridad. Revisa explicaciones y configura tus cuestionarios de Sistemas Microinformáticos y Redes.">
+  <meta name="twitter:image" content="https://smr-hub.pages.dev/assets/brand/SMR.png">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "SMR Hub",
+    "url": "https://smr-hub.pages.dev/",
+    "description": "Recursos, tests y herramientas para estudiar Sistemas Microinformáticos y Redes.",
+    "inLanguage": "es"
+  }
+  </script>
+  <link rel="icon" type="image/png" href="assets/brand/SMR.png">
+
+  <script>
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem('smrhub:settings') || '{}');
+        var dark = s.theme
+          ? s.theme === 'dark'
+          : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var root = document.documentElement;
+
+        root.dataset.theme = dark ? 'dark' : 'light';
+        if (s.textSize) root.dataset.textSize = s.textSize;
+        if (s.animations === false) root.dataset.animations = 'off';
+      } catch (e) {
+        /* Las preferencias son opcionales. */
+      }
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/phase7.css">
+  <link rel="stylesheet" href="css/print.css">
+</head>
+
+<body>
+  <a class="skip-link" href="#content">Saltar al contenido</a>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="Barra lateral">
+      <div class="sidebar-brand">
+        <a class="brand-link" href="./">
+          <img
+            class="brand-logo"
+            src="assets/brand/SMR.png"
+            alt=""
+            width="28"
+            height="28"
+            onload="this.classList.add('is-loaded')"
+            onerror="this.remove()"
+          >
+          <span class="brand-word">SMR Hub</span>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Secciones">
+        <ul id="nav-list"><li><a class="nav-link" href="tests">Tests</a></li><li><a class="nav-link" href="recursos">Recursos</a></li><li><a class="nav-link" href="herramientas">Herramientas</a></li><li><a class="nav-link" href="glosario">Glosario</a></li></ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <ul id="nav-footer"></ul>
+      </div>
+    </aside>
+
+    <div class="scrim" id="scrim" hidden></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button
+          class="icon-btn menu-btn"
+          id="menu-btn"
+          type="button"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="sidebar"
+        ></button>
+
+        <div class="topbar-title">
+          <h1 id="page-title">Tests SMR: preguntas de Sistemas Microinformáticos y Redes</h1>
+          <p id="page-desc">Practica con tests SMR de redes, sistemas, hardware y seguridad. Revisa explicaciones y configura tus cuestionarios de Sistemas Microinformáticos y Redes.</p>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="search" id="search" role="search">
+            <span class="search-icon" id="search-icon" aria-hidden="true"></span>
+            <input
+              type="search"
+              class="input search-input"
+              id="search-input"
+              placeholder="Buscar"
+              aria-label="Buscar"
+              autocomplete="off"
+              spellcheck="false"
+            >
+            <div class="search-results" id="search-results" hidden></div>
+          </div>
+
+          <button
+            class="icon-btn palette-btn"
+            id="palette-btn"
+            type="button"
+            title="Búsqueda global (Ctrl+K)"
+            aria-label="Abrir búsqueda global (Ctrl+K)"
+          ></button>
+
+          <button class="icon-btn" id="theme-btn" type="button"></button>
+        </div>
+      </header>
+
+      <main class="content" id="content" tabindex="-1"><section class="panel seo-copy" aria-labelledby="tests-practice">
+      <h2 id="tests-practice">Preguntas para estudiar Sistemas Microinformáticos y Redes</h2>
+      <p>Practica con 7 tests y 154 preguntas del banco actual. Encontrarás redes, sistemas operativos, hardware, seguridad, virtualización, mantenimiento y ofimática: son categorías de estudio, no una relación de exámenes oficiales.</p>
+      <p>En modo Práctica puedes leer la explicación después de responder. En modo Examen revisas los resultados al terminar; también puedes elegir cantidad y dificultad. Escoge un test del catálogo o configura un examen con varias categorías.</p>
+      <p>Antes de responder, consulta los <a href="recursos">recursos de estudio</a>, las <a href="glosario">definiciones del glosario</a> o los <a href="recursos/subnetting">ejercicios de subnetting</a>.</p>
+    </section><section class="panel seo-copy"><h2>Catálogo de tests SMR</h2>
+      <ul><li><h3><a href="tests?test=t-virtualizacion">Test de Virtualización</a></h3><p>Hipervisores, máquinas virtuales, snapshots y redes virtuales. 18 preguntas.</p></li><li><h3><a href="tests?test=t-mantenimiento">Test de Mantenimiento</a></h3><p>Preventivo, diagnóstico, temperaturas, SMART y recuperación de averías. 18 preguntas.</p></li><li><h3><a href="tests?test=t-ofimatica">Test de Ofimática</a></h3><p>Documentos, hojas de cálculo, presentaciones y formatos. 16 preguntas.</p></li><li><h3><a href="tests?test=t-redes">Test de Redes</a></h3><p>Subnetting, Ethernet, VLAN, NAT, routing, diagnóstico, DNS, IPv6, medios y VLSM. 27 preguntas.</p></li><li><h3><a href="tests?test=t-sistemas">Test de Sistemas Operativos</a></h3><p>Permisos, memoria, procesos, arranque, servicios, terminal, recuperación, logs, instalación y particiones. 26 preguntas.</p></li><li><h3><a href="tests?test=t-hardware">Test de Hardware</a></h3><p>CPU, refrigeración, RAM, almacenamiento, PSU, placa base, GPU, mantenimiento y diagnóstico. 24 preguntas.</p></li><li><h3><a href="tests?test=t-seguridad">Test de Seguridad</a></h3><p>Ingeniería social, malware, MFA, contraseñas, cifrado, Wi-Fi, buenas prácticas y copias de seguridad. 25 preguntas.</p></li></ul>
+      <p>Activa JavaScript para iniciar los cuestionarios y guardar tus resultados.</p></section></main>
+    </div>
+  </div>
+
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Navegación principal"></nav>
+
+  <script src="js/data.js" defer></script>
+  <script src="js/curriculum.js" defer></script>
+  <script src="js/content.js" defer></script>
+  <script src="js/questions.js" defer></script>
+  <script src="js/seo-content.js" defer></script>
+  <script src="js/srs.js" defer></script>
+  <script src="js/tools.js" defer></script>
+  <script src="js/tests.js" defer></script>
+  <script src="js/pdf-export.js" defer></script>
+  <script src="js/dashboard.js" defer></script>
+  <script src="js/profile.js" defer></script>
+  <script src="js/offline-store.js" defer></script>
+  <script src="js/app.js" defer></script>
+
+  <!-- Carga la configuración pública antes de los scripts defer de Supabase. -->
+  <script>
+    (function () {
+      var configSrc = window.location.hostname === 'normalguy749.github.io'
+        ? 'https://smr-hub.pages.dev/js/cloud-config.public'
+        : 'js/cloud-config.public';
+
+      document.write('<script src="' + configSrc + '"><\/script>');
+    })();
+  </script>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script defer src="js/cloud-config.js"></script>
+  <script defer src="js/supabase.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/cloud-profile.js"></script>
+  <script defer src="js/cloud-progress.js"></script>
+  <script defer src="js/cloud-feedback.js"></script>
+</body>
+</html>

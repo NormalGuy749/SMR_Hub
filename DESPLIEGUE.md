@@ -1,5 +1,30 @@
 # Despliegue de SMR Hub — configuración pública de Supabase
 
+## HTML inicial de las landings SEO
+
+Antes de entregar cambios de contenido, metadata o shell, ejecuta `node scripts/build-seo.js`
+y `node scripts/build-seo.js --check`. Los archivos versionados `index.html`, `tests.html`,
+`glosario.html` y `recursos/subnetting.html` se generan desde la shell de `index.html`,
+las rutas de `js/app.js`, los datos publicados y `js/seo-content.js`. Edita los textos
+compartidos en este último archivo; no edites el contenido generado de las páginas.
+`node tests/seo.test.js` falla si alguna página queda desactualizada.
+
+Cloudflare sirve `/tests`, `/glosario` y `/recursos/subnetting` mediante sus archivos
+HTML nativos, sin regla de proxy a `/index.html`. Las reglas de normalización de barra
+final y el fallback 404 del mirror se mantienen. Las demás rutas conservan su shell SPA.
+El mirror sigue recuperando las rutas limpias mediante JavaScript en `404.html`.
+En el fallback offline, el SW fija la base del HTML al montaje antes de devolverlo,
+para que la precarga de assets en rutas con barra final no use la carpeta de la ruta.
+
+Solo `/`, `/tests`, `/glosario`, `/recursos`, `/herramientas` y `/recursos/subnetting`
+se incluyen en sitemap y reciben `index, follow`. El resto de vistas, incluidas las
+personales y la exportación, reciben `noindex, follow` al renderizar la SPA; navegar
+a una landing restaura `index, follow`. Las cuatro landings ya lo declaran en HTML.
+WebSite describe el sitio completo; no se añade schema de Quiz ni de FAQ a los catálogos.
+
+Los HTML generados ya van incluidos en el repositorio: no se requiere cambiar el build
+del hosting ni instalar dependencias. Este procedimiento no publica los cambios.
+
 Procedimiento para que la SPA estática (Cloudflare Pages) reciba la URL del proyecto y la
 clave publicable sin poner ningún secreto en el cliente. Lo contrario (no configurar nada)
 es un estado válido: la aplicación funciona en modo local-first.

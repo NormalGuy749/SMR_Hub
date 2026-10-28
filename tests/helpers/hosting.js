@@ -26,11 +26,13 @@ function hostingResponse(hosting, input, rules = fs.readFileSync(path.join(ROOT,
   };
   const asset = (pathname) => {
     if (hosting === 'cloudflare' && pathname === '/index.html') return redirect('/', 308);
+    if (hosting === 'cloudflare' && pathname.endsWith('.html') && fs.existsSync(path.join(ROOT, pathname.slice(1)))) return redirect(pathname.slice(0, -5), 308);
     if (pathname === base) return fileResponse('index.html');
     if (!pathname.startsWith(base)) return fileResponse('404.html', 404);
     const relative = decodeURIComponent(pathname.slice(base.length));
     const file = path.resolve(ROOT, relative);
     if (!file.startsWith(ROOT + path.sep)) return fileResponse('404.html', 404);
+    if (hosting === 'cloudflare' && fs.existsSync(file + '.html')) return fileResponse(relative + '.html');
     if (fs.existsSync(file)) {
       if (fs.statSync(file).isFile()) return fileResponse(relative);
       if (hosting === 'github' && !pathname.endsWith('/')) return redirect(pathname + '/', 301);

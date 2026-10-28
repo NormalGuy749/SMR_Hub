@@ -60,7 +60,7 @@ function loadWorker(basePath) {
     addEventListener(type, fn) { events[type] = fn; },
     skipWaiting: async () => {}, clients: { claim: async () => {} }
   };
-  const ctx = { self, location: self.location, caches, URL, Response, fetch: async () => { throw new Error('offline'); } };
+  const ctx = { self, location: self.location, caches, URL, Response, Headers, fetch: async () => { throw new Error('offline'); } };
   vm.createContext(ctx);
   ctx.importScripts = (file) => { assert(file === 'js/routing.js'); vm.runInContext(fs.readFileSync(file, 'utf8'), ctx); };
   vm.runInContext(SW + '\n;globalThis.state = { CACHE_NAME, PRECACHE, NEVER_CACHE };', ctx);
@@ -171,7 +171,7 @@ check('la cola offline se carga antes que app.js', () => {
 console.log('\nsw.js');
 
 check('versión de caché esperada', () => {
-  assert(loadWorker('/').state.CACHE_NAME === 'smr-hub:/:v3');
+  assert(loadWorker('/').state.CACHE_NAME === 'smr-hub:/:v4');
 });
 
 const PRE_CACHE = loadWorker('/').state.PRECACHE;
@@ -286,7 +286,7 @@ console.log('\njs/offline-store.js');
           assert(response.status === 200 && await response.text() === 'cached:' + base, 'shell offline incorrecta: ' + route);
         }
       }
-      for (const path of ['no-existe', 'tests/no-existe', 'recursos/subnetting']) {
+      for (const path of ['no-existe', 'tests/no-existe', 'recursos/no-existe']) {
         assert((await h.request(entry + path)).status === 404, 'shell 200 para ruta inexistente: ' + path);
       }
     }
@@ -312,9 +312,22 @@ console.log('\njs/offline-store.js');
       h.caches.match = async (key) => key === '/index.html' ? cached.clone() : undefined;
       const response = await h.request('https://smr.test/tests');
       assert(response.status === 200 && !response.redirected, 'la shell sigue marcada como redirect');
-      assert(await response.text() === HTML, 'se perdió el HTML de la shell');
+      assert((await response.text()).replace('<base href="/">', '<base href="./">') === HTML, 'se perdió el HTML de la shell');
     } finally {
       await new Promise((resolve) => server.close(resolve));
+    }
+  });
+  await check('la shell offline fija la base de assets antes de ejecutar JS y conserva las cabeceras de seguridad', async () => {
+    for (const base of ['/', '/SMR_Hub/']) {
+      const h = loadWorker(base);
+      h.caches.match = async () => new Response(HTML, { headers: { 'Content-Type': 'text/html', 'Content-Length': String(Buffer.byteLength(HTML)), 'Content-Encoding': 'gzip', 'Content-Security-Policy': "default-src 'self'" } });
+      const url = 'https://smr.test' + base + 'recursos/subnetting/?q=offline#practica';
+      const response = await h.request(url);
+      const html = await response.text();
+      const href = html.match(/<base href="([^"]+)"/)[1];
+      assert(new URL('js/app.js', new URL(href, url)).href === 'https://smr.test' + base + 'js/app.js', 'precarga de assets fuera del montaje');
+      assert(response.headers.get('Content-Security-Policy') === "default-src 'self'", 'se perdió CSP');
+      assert(!response.headers.has('Content-Length') && !response.headers.has('Content-Encoding'), 'cabeceras del cuerpo anterior');
     }
   });
   await check('el worker conserva navegación online, SWR local y red externa', async () => {
