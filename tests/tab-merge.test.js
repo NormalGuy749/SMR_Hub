@@ -28,6 +28,7 @@ function slice(from, to) {
 const STORE_SRC = slice("const STORE_PREFIX = 'smrhub:';", '/* ---------- Iconos (');
 const MERGE_SRC = slice('const ACTIVITY_LIMIT = 40;', 'function dayKey(');
 const SAVE_SRC = slice('  otherSlot() { return SMR.store.get', '  /* --- Recursos --- */');
+const TEST_SRC = slice('  recordTest({', '  wrongRefs()');
 const STUDY_SRC = slice('  recordStudySession(minutes, steps) {', '  studyMinutes()');
 
 const UID_A = 'uid-A';
@@ -192,6 +193,7 @@ function makeTab(bus, opts) {
     this.save();
   };
   progress.touchStreak = function () { return true; };
+  progress.recordTest = new Function('SMR', 'window', 'HISTORY_LIMIT', 'Date', 'return { ' + TEST_SRC + ' }.recordTest;')(g.SMR, g, 60, { now: o.now || Date.now });
   progress.recordStudySession = new Function('return { ' + STUDY_SRC + ' }.recordStudySession;')();
   progress.logActivity = function (type, label, meta) {
     this.data.activity.push({ type, label, meta: meta || '', ts: Date.now() });
@@ -292,39 +294,111 @@ function seedAccount(bus, uid, progressObj) {
   await (async () => {
     const bus = makeBus();
     seedAccount(bus, UID_A, progressWith({}));
-    const { t1, t2 } = reload(bus);
+    const { t1, t2 } = reload(bus, { tab1: { now: () => 100 }, tab2: { now: () => 200 } });
     t1.auth(user(UID_A));
     t2.auth(user(UID_A));
     await flush();
-    t1.progress.data.tests.history.push({ ts: 100, mode: 'test', testId: 't-t1', score: 50 });
-    t1.progress.save();
+    t1.progress.recordTest({ testId: 't-t1', title: 'Test A', correct: 1, total: 2 });
     await flush();
-    t2.progress.data.tests.history.push({ ts: 200, mode: 'test', testId: 't-t1', score: 80 });
-    t2.progress.save();
+    assert(t2.progress.data.tests.history.length === 0, 'la segunda pestaña conserva la copia anterior');
+    t2.progress.recordTest({ testId: 't-t1', title: 'Test A', correct: 4, total: 5 });
     await flush();
     const hist = (bus.ls.get(P + 'progress') && JSON.parse(bus.ls.get(P + 'progress')).tests.history) || [];
     assert(hist.length === 2, 'las dos entradas de historial conviven: ' + JSON.stringify(hist));
-    assert(hist[0].ts === 100 && hist[1].ts === 200, 'ordenado por ts');
+    assert(hist[0].date === 100 && hist[1].date === 200, 'ordenado por date');
+    assert(hist[0].pct === 50 && hist[1].pct === 80, 'conserva las notas reales');
+    assert(hist.every((h) => Object.keys(h).sort().join() === 'correct,date,mode,pct,testId,title,total'), 'forma real de recordTest');
     const many = [];
-    for (let i = 1; i <= 60; i++) many.push({ ts: i, mode: 'test', testId: 't-t1', score: i });
+    for (let i = 1; i <= 60; i++) many.push({ testId: 't-t1', title: 'Test A', correct: 1, total: 2, pct: 50, mode: 'practica', date: i });
     bus.seed(P + 'progress', JSON.stringify(progressWith({ history: many })));
     bus.seed(P + 'progressByOwner:' + UID_A, JSON.stringify({ slot: { progress: progressWith({ history: many }) }, savedAt: 2, v: 1 }));
     const r = reload(bus);
     r.t1.auth(user(UID_A));
     r.t2.auth(user(UID_A));
     await flush();
-    r.t2.progress.data.tests.history.push({ ts: 61, mode: 'test', testId: 't-t1', score: 61 });
+    r.t2.progress.data.tests.history.push({ ...many[0], date: 61 });
     r.t2.progress.save();
     await flush();
-    r.t1.progress.data.tests.history.push({ ts: 62, mode: 'test', testId: 't-t1', score: 62 });
+    r.t1.progress.data.tests.history.push({ ...many[0], date: 62 });
     r.t1.progress.save();
     await flush();
     const capped = JSON.parse(bus.ls.get(P + 'progress')).tests.history;
     assert(capped.length === 60, 'la lista se mantiene en el límite real (60): ' + capped.length);
-    assert(capped[capped.length - 1].ts === 62, 'la entrada más reciente sobrevive al límite: ' + JSON.stringify(capped[capped.length - 1]));
-    assert(capped[capped.length - 2].ts === 61, 'y la de la otra pestaña también: ' + JSON.stringify(capped[capped.length - 2]));
+    assert(capped[0].date === 3 && capped[capped.length - 1].date === 62, 'conserva las 60 fechas más recientes: ' + JSON.stringify(capped));
+    assert(capped[capped.length - 2].date === 61, 'y la de la otra pestaña también: ' + JSON.stringify(capped[capped.length - 2]));
   })();
   record('historial acumulativo: se unen las entradas de las dos pestañas (orden + límite 60)');
+
+  const attempt = { testId: 't-t1', title: 'Test A', correct: 1, total: 2, pct: 50, mode: 'practica', date: 100 };
+  for (const [label, change] of [
+    ['mismo test y distinta fecha', { date: 200, correct: 2, pct: 100 }],
+    ['mismo porcentaje y distinta fecha', { date: 50 }],
+    ['distinto test y mismo porcentaje', { testId: 't-t2' }],
+    ['distinto modo', { mode: 'rapido' }],
+    ['mismo milisegundo y distinto porcentaje', { correct: 2, pct: 100 }],
+    ['mismo milisegundo y distintos aciertos con igual porcentaje redondeado', { correct: 1000, total: 2001 }],
+    ['mismo milisegundo y distinto total con igual porcentaje redondeado', { total: 2001, correct: 1001 }],
+    ['mismo milisegundo y distinto título', { title: 'Test renombrado' }]
+  ]) {
+    const { t1, t2, bus } = twoTabs({ tab1: { noCloud: true }, tab2: { noCloud: true } });
+    const other = { ...attempt, ...change };
+    t1.progress.data.tests.history.push({ ...attempt }); t1.progress.save();
+    t2.progress.data.tests.history.push(other); t2.progress.save();
+    const saved = t2.live('progress').tests.history;
+    assert(saved.length === 2 && saved.some((h) => JSON.stringify(h) === JSON.stringify(attempt)) && saved.some((h) => JSON.stringify(h) === JSON.stringify(other)), label + ': ' + JSON.stringify(saved));
+    assert(saved[0].date <= saved[1].date, 'orden cronológico: ' + label);
+    t1.progress.save(); t2.progress.save();
+    const reloaded = reload(bus, { tab1: { noCloud: true }, tab2: { noCloud: true } });
+    assert(reloaded.t1.progress.data.tests.history.length === 2 && reloaded.t2.progress.data.tests.history.length === 2, 'guardados y recargas conservan ambos intentos');
+    record('historial visitante: ' + label);
+  }
+
+  await (async () => {
+    const { t1, t2 } = twoTabs({ tab1: { noCloud: true }, tab2: { noCloud: true } });
+    t1.progress.data.tests.history.push({ ...attempt }); t1.progress.save();
+    t2.progress.data.tests.history.push({ ...attempt }, { ...attempt, date: 200 }); t2.progress.save();
+    t1.progress.logActivity('test', 'provoca otro guardado');
+    const saved = t1.live('progress').tests.history;
+    assert(saved.length === 2 && saved.filter((h) => h.date === 100).length === 1, 'la entrada compartida se duplicó: ' + JSON.stringify(saved));
+  })();
+  record('historial: misma entrada observada en dos pestañas se deduplica y conserva la nueva');
+
+  await (async () => {
+    const old = { testId: 't-antiguo', pct: 25 };
+    const withTimestamp = { testId: 't-antiguo', pct: 75, ts: 50 };
+    const { t1, t2 } = twoTabs({ seed: [[P + 'progress', JSON.stringify(progressWith({ history: [old, withTimestamp] }))]], tab1: { noCloud: true }, tab2: { noCloud: true } });
+    t1.progress.data.tests.history.push({ ...attempt }); t1.progress.save();
+    t2.progress.data.tests.history.push({ ...attempt, date: 200 }); t2.progress.save();
+    const saved = t2.live('progress').tests.history;
+    assert(saved.length === 4, 'se perdió historial parcial admitido por sanitizeProgress: ' + JSON.stringify(saved));
+    assert(JSON.stringify(saved[0]) === JSON.stringify(old) && JSON.stringify(saved[1]) === JSON.stringify(withTimestamp), 'se alteraron datos previos o su orden');
+  })();
+  record('historial parcial sin date/contadores se conserva sin migración (ts como respaldo de orden)');
+
+  await (async () => {
+    const bus = makeBus();
+    seedAccount(bus, UID_A, progressWith({}));
+    bus.seed(P + 'progressByOwner:' + UID_B, JSON.stringify({ slot: { progress: progressWith({}) }, savedAt: 1, v: 1 }));
+    bus.seed(P + 'progressByOwner:__guest__', JSON.stringify({ slot: { progress: progressWith({}) }, savedAt: 1, v: 1 }));
+    const { t1, t2 } = reload(bus, { tab1: { now: () => 100 }, tab2: { now: () => 200 } });
+    t1.auth(user(UID_A)); t2.auth(user(UID_A)); await flush();
+    t1.progress.recordTest({ testId: 't-t1', title: 'Cuenta A', correct: 1, total: 2 });
+    t2.progress.recordTest({ testId: 't-t1', title: 'Cuenta A', correct: 1, total: 2 });
+    t1.auth(user(UID_B)); await flush();
+    assert(t1.progress.data.tests.history.length === 0, 'A contaminó el historial de B');
+    t1.progress.recordTest({ testId: 't-t1', title: 'Cuenta B', correct: 1, total: 2 });
+    t1.auth(null); await flush();
+    assert(t1.progress.data.tests.history.length === 0, 'B contaminó el historial del visitante');
+    t1.progress.recordTest({ testId: 't-t1', title: 'Visitante', correct: 1, total: 2 });
+    t1.auth(user(UID_A)); await flush();
+    const history = t1.progress.data.tests.history;
+    assert(history.length === 2 && history.every((h) => h.title === 'Cuenta A'), 'B/visitante contaminó A o se perdió un intento');
+    const historyB = t1.snapshot(UID_B).slot.progress.tests.history;
+    const historyGuest = t1.snapshot('__guest__').slot.progress.tests.history;
+    assert(historyB.length === 1 && historyB[0].title === 'Cuenta B', 'snapshot B perdido o contaminado');
+    assert(historyGuest.length === 1 && historyGuest[0].title === 'Visitante', 'snapshot visitante perdido o contaminado');
+  })();
+  record('historial real aislado entre A, B y visitante tras dos escrituras de A');
 
   /* 3. BORRADO PROPIO + ALTA AJENA: el borrado no resucita ni bloquea lo demás. */
   await (async () => {

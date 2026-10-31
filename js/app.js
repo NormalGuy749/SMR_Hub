@@ -258,7 +258,11 @@ const HISTORY_LIMIT = 60;
 const SLOT_ARRAYS = {
   studySessions: { key: (x) => x && (x.ts + '\u0000' + x.minutes + '\u0000' + x.steps), sort: (a, b) => ((a && a.ts) || 0) - ((b && b.ts) || 0), limit: 20 },
   activity: { key: (x) => x && (x.ts + '\u0000' + x.type + '\u0000' + x.label + '\u0000' + x.meta), sort: (a, b) => (a.ts || 0) - (b.ts || 0), limit: ACTIVITY_LIMIT },
-  'tests.history': { key: (x) => x && (x.ts + '\u0000' + x.mode + '\u0000' + x.testId + '\u0000' + x.score), sort: (a, b) => (a.ts || 0) - (b.ts || 0), limit: HISTORY_LIMIT }
+  'tests.history': {
+    key: (x) => x && JSON.stringify([x.testId, x.mode, x.date ?? x.ts, x.pct ?? x.score, x.correct, x.total, x.title]),
+    sort: (a, b) => (a.date ?? a.ts ?? 0) - (b.date ?? b.ts ?? 0),
+    limit: HISTORY_LIMIT
+  }
 };
 
 function isPlainObject(v) {
