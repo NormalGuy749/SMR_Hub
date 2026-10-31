@@ -1268,6 +1268,21 @@ window.SMR_TESTS = (function () {
 
   /* ---------- API para el Modo Estudio ---------- */
 
+  function studyCandidates(selection) {
+    const pool = allCandidates();
+    const refs = selection === '__errores' ? progress().wrongRefs() : selection === '__srs' ? progress().dueSrs() : null;
+    const selected = refs
+      ? refs.map((ref) => pool.find((c) => c.testId === ref.testId && c.origIndex === ref.qIndex)).filter(Boolean)
+      : filterPool(pool, { category: selection });
+    const seen = new Set();
+    return selected.filter((c) => {
+      const id = window.SMR.srs && SMR.srs.idOf(c.testId, c.origIndex);
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
+
   function renderStudy(root, onGuided) {
     stop();
     session = null;
@@ -1276,10 +1291,16 @@ window.SMR_TESTS = (function () {
       <section class="panel" aria-labelledby="question-study-title">
         <h2 id="question-study-title">Estudiar preguntas</h2>
         <p class="count-note">Repasa a tu ritmo: muestra la respuesta y valora si la sabías. Sin nota y sin modificar tus errores ni resultados de tests.</p>
-        <label class="test-opt" for="question-study-category">Categoría</label>
+        <label class="test-opt" for="question-study-category">Qué quieres estudiar</label>
         <select class="input" id="question-study-category">
           <option value="">Todas las preguntas</option>
-          ${categories.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+          <optgroup label="Por categoría">
+            ${categories.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+          </optgroup>
+          <optgroup label="Repaso">
+            <option value="__errores">Errores (${studyCandidates('__errores').length})</option>
+            <option value="__srs">SRS pendientes (${studyCandidates('__srs').length})</option>
+          </optgroup>
         </select>
         <p id="question-study-status" role="status"></p>
         <div class="quiz-actions"><button type="button" class="btn btn-primary" id="question-study-start">Iniciar estudio</button></div>
@@ -1291,21 +1312,17 @@ window.SMR_TESTS = (function () {
       </section>`;
     root.querySelector('#question-study-guided').addEventListener('click', onGuided);
     root.querySelector('#question-study-start').addEventListener('click', () => {
-      const category = root.querySelector('#question-study-category').value;
-      const seen = new Set();
-      const questions = filterPool(allCandidates(), { category }).filter((c) => {
-        const id = window.SMR.srs && SMR.srs.idOf(c.testId, c.origIndex);
-        if (!id || seen.has(id)) return false;
-        seen.add(id);
-        return true;
-      });
+      const selection = root.querySelector('#question-study-category').value;
+      const questions = studyCandidates(selection);
       if (!questions.length) {
-        root.querySelector('#question-study-status').textContent = 'No hay preguntas disponibles para esta selección.';
+        root.querySelector('#question-study-status').textContent = selection === '__errores'
+          ? 'No tienes preguntas con errores pendientes.' : selection === '__srs'
+            ? 'No tienes repasos pendientes.' : 'No hay preguntas disponibles para esta selección.';
         return;
       }
       const ownerContract = window.SMR.cloudSession;
       const study = {
-        mode: 'estudio', questions, index: 0, startedAt: Date.now(), studied: 0,
+        mode: 'estudio', source: selection, questions, index: 0, startedAt: Date.now(), studied: 0,
         revealed: false, rated: false, finished: false, onGuided,
         data: progress().data, ownerContract,
         ownerToken: ownerContract ? ownerContract.token() : null
@@ -1340,7 +1357,8 @@ window.SMR_TESTS = (function () {
           <p class="quiz-counter">Pregunta ${s.index + 1} de ${s.questions.length}</p>
           <p>${s.studied} ${s.studied === 1 ? 'revelada' : 'reveladas'}</p>
         </div>
-        <p class="quiz-mode">Estudiar preguntas · ${esc(c.category)} · ${esc(c.testTitle)}</p>
+        <p class="quiz-mode">Estudiar preguntas${s.source === '__errores' ? ' · Errores' : s.source === '__srs' ? ' · SRS pendientes' : ''} · ${esc(c.category)} · ${esc(c.testTitle)}</p>
+        ${s.source === '__errores' ? '<p class="count-note">Estudiar no elimina el error. Para resolverlo, responde en el repaso evaluado de Tests.</p>' : ''}
         <h3 class="quiz-q" tabindex="-1">${esc(q.q)}</h3>
         <div class="quiz-options" role="list" aria-label="Opciones">
           ${q.options.map((opt, i) => `<div class="quiz-option" role="listitem"><span class="opt-letter mono">${String.fromCharCode(97 + i)})</span> ${esc(opt)}</div>`).join('')}

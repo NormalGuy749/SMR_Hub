@@ -11,16 +11,19 @@ function metrics(data) {
   return JSON.stringify(rest);
 }
 
-function check(name, fn) {
+function check(name, fn, setup = () => {}) {
   try {
-    const h = load(), initial = metrics(h.g.SMR.progress.data);
+    const h = load();
+    setup(h);
+    const initial = metrics(h.g.SMR.progress.data);
+    const initialSrs = JSON.stringify(h.g.SMR.progress.data.tests.srs);
     h.calls = [];
     const schedule = h.g.SMR.progress.scheduleSrs;
     h.g.SMR.progress.scheduleSrs = function (...args) { h.calls.push(args); return schedule.apply(this, args); };
     h.g.SMR_TESTS.renderStudy(h.root, () => h.startStudy(10, h.root));
     fn(h);
     assert.equal(metrics(h.g.SMR.progress.data), initial, 'best/last/history/wrong cambiaron');
-    if (!h.calls.length) h.unchanged();
+    if (!h.calls.length) assert.equal(JSON.stringify(h.g.SMR.progress.data.tests.srs), initialSrs, 'SRS cambió sin valoración');
     passed++;
     console.log('  ✓ ' + name);
   } catch (e) {
@@ -63,6 +66,26 @@ function owner(h) {
   return state;
 }
 
+function errors(h) {
+  const id1 = h.g.SMR.srs.idOf(h.first.id, 1);
+  h.g.SMR.progress.data.tests.wrong = {
+    [h.first.id]: { [h.id]: 2, 0: 9, [id1]: 4, 'q-0000000000000000': 7, 9999: 10 },
+    'test-no-existe': { 0: 5 }
+  };
+}
+
+function due(h) {
+  const now = h.g.Date.now();
+  h.g.SMR.progress.data.tests.srs = {
+    [h.id]: { level: 2, due: now - 1000 },
+    [h.first.id + ':0']: { level: 2, due: now - 5000 },
+    [h.g.SMR.srs.idOf(h.first.id, 1)]: { level: 1, due: now - 10000 },
+    [h.g.SMR.srs.idOf(h.first.id, 2)]: { level: 3, due: now + 86400000 },
+    'q-0000000000000000': { level: 1, due: now - 20000 },
+    [h.first.id + ':9999']: { level: 1, due: now - 30000 }
+  };
+}
+
 check('Todas: 154 candidatos, orden original y procedencia en la presentación', (h) => {
   start(h);
   assert.ok(h.root.innerHTML.includes('Pregunta 1 de 154'));
@@ -79,7 +102,7 @@ check('categorías: solo las siete editoriales con preguntas', (h) => {
   const cats = new Set(h.g.SMR_DATA.tests.filter((t) => t.questions.length).map((t) => t.category));
   assert.equal(cats.size, 7);
   cats.forEach((cat) => assert.ok(h.root.innerHTML.includes(`<option value="${cat}">`)));
-  assert.equal((h.root.innerHTML.match(/<option/g) || []).length, 8);
+  assert.equal((h.root.innerHTML.match(/<option/g) || []).length, 10);
 });
 
 check('por categoría: solo sus preguntas y procedencia del test original', (h) => {
@@ -370,6 +393,147 @@ check('la entrada secundaria abre el guiado existente', (h) => {
   assert.equal(h.state.active, true);
   assert.equal(h.state.steps[0].type, 'explain');
 });
+
+check('Errores: contador de dos preguntas utilizables, no seis referencias crudas', (h) => {
+  assert.ok(h.g.SMR.progress.wrongRefs().length > 2);
+  assert.ok(h.root.innerHTML.includes('Errores (2)'));
+}, errors);
+
+check('Errores: resuelve, deduplica y conserva la procedencia de las dos preguntas', (h) => {
+  start(h, '__errores');
+  assert.ok(h.root.innerHTML.includes('Pregunta 1 de 2'));
+  for (let i = 0; i < 2; i++) {
+    assert.ok(h.root.innerHTML.includes(h.first.questions[i].q));
+    click(h, 'reveal');
+    const ds = h.root.querySelector('[data-srs-test]').dataset;
+    assert.equal(ds.srsTest, h.first.id);
+    assert.equal(ds.srsIndex, String(i));
+    if (i === 0) click(h, 'next');
+  }
+  assert.equal(h.root.querySelector('#question-study-next'), null);
+}, errors);
+
+check('Errores: revelar, valorar y finalizar conservan todos los errores, incluidos los huérfanos', (h) => {
+  const before = JSON.stringify(h.g.SMR.progress.data.tests.wrong);
+  start(h, '__errores');
+  click(h, 'reveal');
+  assert.equal(JSON.stringify(h.g.SMR.progress.data.tests.wrong), before);
+  rate(h, 2);
+  assert.equal(JSON.stringify(h.g.SMR.progress.data.tests.wrong), before);
+  click(h, 'finish');
+  assert.equal(JSON.stringify(h.g.SMR.progress.data.tests.wrong), before);
+  assert.equal(h.g.SMR.progress.data.studySessions[0].steps, 1);
+}, errors);
+
+for (const unresolved of [false, true]) check('Errores: vacío' + (unresolved ? ' con referencias no resolubles conservadas' : ''), (h) => {
+  const before = JSON.stringify(h.g.SMR.progress.data);
+  start(h, '__errores');
+  assert.match(h.root.querySelector('#question-study-status').textContent, /No tienes preguntas con errores pendientes/);
+  assert.equal(h.root.querySelector('#question-study-reveal'), null);
+  assert.equal(JSON.stringify(h.g.SMR.progress.data), before);
+}, (h) => {
+  h.g.SMR.progress.data.tests.wrong = unresolved ? { [h.first.id]: { 'q-0000000000000000': 2, 9999: 1 } } : {};
+});
+
+check('SRS: contador de dos pendientes utilizables, excluye futuras y referencias no resolubles', (h) => {
+  assert.ok(h.g.SMR.progress.dueSrs().length > 2);
+  assert.ok(h.root.innerHTML.includes('SRS pendientes (2)'));
+}, due);
+
+check('SRS: usa el orden de dueSrs, deduplica y conserva testId/origIndex', (h) => {
+  start(h, '__srs');
+  assert.ok(h.root.innerHTML.includes('Pregunta 1 de 2'));
+  for (const i of [1, 0]) {
+    assert.ok(h.root.innerHTML.includes(h.first.questions[i].q));
+    click(h, 'reveal');
+    const ds = h.root.querySelector('[data-srs-test]').dataset;
+    assert.equal(ds.srsTest, h.first.id);
+    assert.equal(ds.srsIndex, String(i));
+    if (i === 1) click(h, 'next');
+  }
+  assert.equal(h.root.querySelector('#question-study-next'), null);
+}, due);
+
+check('SRS: revelar, avanzar y terminar sin valorar conservan todas las tarjetas', (h) => {
+  const before = JSON.stringify(h.g.SMR.progress.data.tests.srs);
+  start(h, '__srs');
+  click(h, 'reveal');
+  assert.equal(JSON.stringify(h.g.SMR.progress.data.tests.srs), before);
+  click(h, 'next');
+  assert.equal(JSON.stringify(h.g.SMR.progress.data.tests.srs), before);
+  click(h, 'finish');
+  assert.equal(JSON.stringify(h.g.SMR.progress.data.tests.srs), before);
+  assert.equal(h.calls.length, 0);
+}, due);
+
+check('SRS: solo una valoración efectiva cambia la tarjeta mediante scheduleSrs', (h) => {
+  const srs = h.g.SMR.progress.data.tests.srs;
+  const before = JSON.parse(JSON.stringify(srs));
+  start(h, '__srs');
+  click(h, 'reveal');
+  const old = rate(h, 2);
+  old.disabled = false;
+  old.click();
+  assert.deepEqual(h.calls, [[h.first.id, 1, 2]]);
+  const id1 = h.g.SMR.srs.idOf(h.first.id, 1);
+  assert.equal(srs[id1].level, 2);
+  assert.ok(srs[id1].due > h.g.Date.now());
+  Object.keys(before).filter((key) => key !== id1).forEach((key) => assert.deepEqual(JSON.parse(JSON.stringify(srs[key])), before[key]));
+}, due);
+
+for (const kind of ['sin tarjetas', 'futuras', 'no resolubles']) check('SRS: vacío con ' + kind + ' no escribe progreso', (h) => {
+  const before = JSON.stringify(h.g.SMR.progress.data);
+  start(h, '__srs');
+  assert.match(h.root.querySelector('#question-study-status').textContent, /No tienes repasos pendientes/);
+  assert.equal(h.root.querySelector('#question-study-reveal'), null);
+  assert.equal(JSON.stringify(h.g.SMR.progress.data), before);
+}, (h) => {
+  h.g.SMR.progress.data.tests.srs = kind === 'futuras' ? { [h.id]: { level: 2, due: h.g.Date.now() + 100000 } }
+    : kind === 'no resolubles' ? { 'q-0000000000000000': { level: 1, due: 0 } } : {};
+});
+
+for (const [source, setup] of [['__errores', errors], ['__srs', due]]) {
+  check(source + ': cola fija aunque cambie la fuente durante el estudio', (h) => {
+    start(h, source);
+    h.g.SMR.progress.wrongRefs = () => [];
+    h.g.SMR.progress.dueSrs = () => [];
+    click(h, 'reveal');
+    click(h, 'next');
+    assert.ok(h.root.innerHTML.includes('Pregunta 2 de 2'));
+  }, setup);
+
+  for (const change of ['logout', 'login', 'A→B', 'generación', 'progress', 'pendiente']) {
+    check(source + ': ' + change + ' bloquea valoración y registro desde la cola antigua', (h) => {
+      const s = owner(h);
+      if (change === 'login') s.owner = null;
+      start(h, source);
+      click(h, 'reveal');
+      if (change === 'logout') s.owner = null;
+      if (change === 'login') s.owner = 'A';
+      if (change === 'A→B') s.owner = 'B';
+      if (change === 'generación') s.generation++;
+      if (change === 'progress') h.g.SMR.progress.data = JSON.parse(JSON.stringify(h.g.SMR.progress.data));
+      if (change === 'pendiente') s.pending = true;
+      rate(h, 2);
+      click(h, 'finish');
+      assert.equal(h.calls.length, 0);
+      assert.equal(h.g.SMR.progress.data.studySessions.length, 0);
+    }, setup);
+  }
+
+  check(source + ': visitante puede volver a Todas y Por categoría tras salir sin finalizar', (h) => {
+    assert.equal(h.g.SMR.cloudSession, undefined);
+    start(h, source);
+    click(h, 'reveal');
+    click(h, 'exit');
+    assert.equal(h.g.SMR.progress.data.studySessions.length, 0);
+    start(h);
+    assert.ok(h.root.innerHTML.includes('Pregunta 1 de 154'));
+    click(h, 'exit');
+    start(h, 'Redes');
+    assert.ok(h.root.innerHTML.includes('Pregunta 1 de 27'));
+  }, setup);
+}
 
 console.log(`\n${passed} ok, ${failed} fallos`);
 process.exitCode = failed ? 1 : 0;
