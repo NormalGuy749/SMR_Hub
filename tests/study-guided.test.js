@@ -17,16 +17,21 @@ function rootElement() {
     get innerHTML() { return html; },
     set innerHTML(value) {
       html = value;
-      nodes = [...value.matchAll(/<(?:button|div|p)\b([^>]*)>/g)].map((match) => {
+      nodes = [...value.matchAll(/<(?:button|div|p|select|h[23])\b([^>]*)>/g)].map((match) => {
         const attrs = Object.fromEntries([...match[1].matchAll(/([\w-]+)(?:="([^"]*)")?/g)].map((a) => [a[1], a[2] || '']));
         const classes = new Set((attrs.class || '').split(' '));
         const listeners = [];
         return {
           attrs, classes, id: attrs.id, hidden: Object.hasOwn(attrs, 'hidden'),
-          disabled: Object.hasOwn(attrs, 'disabled'), innerHTML: '', textContent: '',
+          disabled: Object.hasOwn(attrs, 'disabled'), innerHTML: '', textContent: '', value: '',
           dataset: Object.fromEntries(Object.entries(attrs).filter(([k]) => k.startsWith('data-'))
             .map(([k, v]) => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), v])),
           classList: { add: (c) => classes.add(c), toggle: (c, active) => active ? classes.add(c) : classes.delete(c) },
+          focus() {},
+          setAttribute(k, v) { attrs[k] = v; },
+          closest(sel) { return nodes.find((n) => matches(n, sel)) || null; },
+          querySelector(sel) { return nodes.find((n) => matches(n, sel)) || null; },
+          querySelectorAll(sel) { return nodes.filter((n) => matches(n, sel)); },
           addEventListener(type, fn, opts) { if (type === 'click') listeners.push({ fn, once: !!(opts && opts.once) }); },
           click() {
             if (this.disabled || this.hidden) return;
@@ -70,6 +75,7 @@ function load() {
   vm.runInContext(APP.slice(APP.indexOf('function wrongResourceIds()'), APP.indexOf('/* Recursos recomendados con motivo')), g);
   g.timeAgo = () => 'ahora';
   g.openResource = (id) => { opened.push(id); g.SMR.progress.markViewed(id); };
+  g.SMR.openResource = g.openResource;
   vm.runInContext(APP.slice(APP.indexOf('const STUDY_DURATIONS'), APP.indexOf('/* ---------- Casos prácticos'))
     + '\nthis.study = { state: studyState, startStudy, renderStudyStep, studyQuestionHtml, finishStudy };', g);
   const first = g.SMR_DATA.tests[0];
@@ -89,6 +95,7 @@ function load() {
 }
 
 function check(name, fn) {
+  if (require.main !== module) return;
   try {
     const h = load();
     fn(h);
@@ -268,5 +275,8 @@ check('sesión libre guarda tiempo transcurrido y un único temporizador', (h) =
   assert.equal(h.g.SMR.progress.data.studySessions[0].minutes, 3);
 });
 
-console.log(`\n${passed} ok, ${failed} fallos`);
-process.exitCode = failed ? 1 : 0;
+module.exports = { load };
+if (require.main === module) {
+  console.log(`\n${passed} ok, ${failed} fallos`);
+  process.exitCode = failed ? 1 : 0;
+}

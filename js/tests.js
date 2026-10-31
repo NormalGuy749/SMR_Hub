@@ -63,6 +63,7 @@ window.SMR_TESTS = (function () {
       window.clearInterval(session.intervalId);
       session.intervalId = null;
     }
+    if (session && session.mode === 'estudio') session = null;
   }
 
   function startTimerIfNeeded(root) {
@@ -992,11 +993,11 @@ window.SMR_TESTS = (function () {
     return { key, level: entry && typeof entry.level === 'number' ? entry.level : null };
   }
 
-  function srsRateHtml(testId, origIndex) {
+  function srsRateHtml(testId, origIndex, selectedRate) {
     if (!window.SMR.srs || typeof window.SMR.srs.idOf !== 'function') return '';
     const { key, level } = srsRateOf(testId, origIndex);
     if (!key) return '';
-    const current = level === null ? null : Math.min(2, Math.max(0, level));
+    const current = selectedRate === undefined ? (level === null ? null : Math.min(2, Math.max(0, level))) : selectedRate;
     const btns = SRS_RATE_LABELS.map((label, i) =>
       `<button type="button" class="btn btn-sm self-btn${current === i ? ' active' : ''}" data-srs-rate="${i}"`
         + ` aria-pressed="${current === i}" aria-label="${esc(label)} (valoración SRS)">${esc(label)}</button>`).join('');
@@ -1142,20 +1143,25 @@ window.SMR_TESTS = (function () {
   /* El listener debe sobrevivir a las revaloraciones: no usar once.
      Cada clic recalcula nivel y due sobre la misma tarjeta; repetir una
      opción, incluso en otra pregunta, sigue siendo una interacción válida. */
-  function wireSrsRating(root) {
+  function wireSrsRating(root, study = null) {
     if (!window.SMR.srs) return;
+    const studyIndex = study && study.index;
     root.querySelectorAll('[data-srs-rate]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const li = btn.closest('[data-srs-test]');
         if (!li) return;
         const rate = Number(btn.dataset.srsRate);
         if (![0, 1, 2].includes(rate)) return;
+        if (study && (study.index !== studyIndex || study.rated || !studySessionCurrent(study, root))) return;
+        if (study) study.rated = true;
         progress().scheduleSrs(li.dataset.srsTest, Number(li.dataset.srsIndex), rate);
         li.querySelectorAll('[data-srs-rate]').forEach((b) => {
           const active = Number(b.dataset.srsRate) === rate;
           b.classList.toggle('active', active);
           b.setAttribute('aria-pressed', String(active));
+          if (study) b.disabled = true;
         });
+        if (study) root.querySelector('#question-study-status').textContent = 'Valoración guardada.';
         /* la tarjeta ya existe (o revive): la acción de quitar vuelve */
         syncSrsDrop(li, li.dataset.srsTest, Number(li.dataset.srsIndex));
       });
@@ -1262,6 +1268,137 @@ window.SMR_TESTS = (function () {
 
   /* ---------- API para el Modo Estudio ---------- */
 
+  function renderStudy(root, onGuided) {
+    stop();
+    session = null;
+    const categories = [...new Set(allCandidates().map((c) => c.category))];
+    root.innerHTML = `
+      <section class="panel" aria-labelledby="question-study-title">
+        <h2 id="question-study-title">Estudiar preguntas</h2>
+        <p class="count-note">Repasa a tu ritmo: muestra la respuesta y valora si la sabías. Sin nota y sin modificar tus errores ni resultados de tests.</p>
+        <label class="test-opt" for="question-study-category">Categoría</label>
+        <select class="input" id="question-study-category">
+          <option value="">Todas las preguntas</option>
+          ${categories.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+        </select>
+        <p id="question-study-status" role="status"></p>
+        <div class="quiz-actions"><button type="button" class="btn btn-primary" id="question-study-start">Iniciar estudio</button></div>
+      </section>
+      <section class="panel" aria-labelledby="guided-study-title">
+        <h2 id="guided-study-title">Sesión guiada</h2>
+        <p class="count-note">Alterna mini lecciones, recursos y preguntas en una sesión guiada.</p>
+        <button type="button" class="btn" id="question-study-guided">Abrir sesión guiada</button>
+      </section>`;
+    root.querySelector('#question-study-guided').addEventListener('click', onGuided);
+    root.querySelector('#question-study-start').addEventListener('click', () => {
+      const category = root.querySelector('#question-study-category').value;
+      const seen = new Set();
+      const questions = filterPool(allCandidates(), { category }).filter((c) => {
+        const id = window.SMR.srs && SMR.srs.idOf(c.testId, c.origIndex);
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+      if (!questions.length) {
+        root.querySelector('#question-study-status').textContent = 'No hay preguntas disponibles para esta selección.';
+        return;
+      }
+      const ownerContract = window.SMR.cloudSession;
+      const study = {
+        mode: 'estudio', questions, index: 0, startedAt: Date.now(), studied: 0,
+        revealed: false, rated: false, finished: false, onGuided,
+        data: progress().data, ownerContract,
+        ownerToken: ownerContract ? ownerContract.token() : null
+      };
+      session = study;
+      if (!studySessionCurrent(study, root)) return;
+      renderStudyQuestion(root);
+    });
+  }
+
+  function studySessionCurrent(study, root) {
+    if (session !== study || study.finished) return false;
+    const c = window.SMR.cloudSession;
+    const owner = study.ownerToken && study.ownerToken.owner;
+    /* El contrato existente también representa al visitante local con owner:null. */
+    if (progress().data === study.data && c === study.ownerContract
+      && (c ? (owner !== '__unknown__' && !c.transitionPending() && c.isCurrent(study.ownerToken)) : !window.SMR.cloudAvailable)) return true;
+    root.querySelector('#question-study-status').textContent = 'La cuenta cambió o está cambiando. Sal de la sesión y vuelve a iniciar el estudio.';
+    return false;
+  }
+
+  function renderStudyQuestion(root) {
+    const s = session;
+    const index = s.index;
+    const c = s.questions[s.index];
+    const q = c.q;
+    const resTitle = s.revealed && q.relatedResource ? resourceTitle(q.relatedResource) : null;
+    root.innerHTML = `
+      <div class="quiz">
+        <div class="quiz-head">
+          <button type="button" class="btn btn-sm" id="question-study-exit">Salir sin finalizar</button>
+          <p class="quiz-counter">Pregunta ${s.index + 1} de ${s.questions.length}</p>
+          <p>${s.studied} ${s.studied === 1 ? 'revelada' : 'reveladas'}</p>
+        </div>
+        <p class="quiz-mode">Estudiar preguntas · ${esc(c.category)} · ${esc(c.testTitle)}</p>
+        <h3 class="quiz-q" tabindex="-1">${esc(q.q)}</h3>
+        <div class="quiz-options" role="list" aria-label="Opciones">
+          ${q.options.map((opt, i) => `<div class="quiz-option" role="listitem"><span class="opt-letter mono">${String.fromCharCode(97 + i)})</span> ${esc(opt)}</div>`).join('')}
+        </div>
+        ${s.revealed ? `
+          <div class="quiz-explain" role="status">
+            <p><strong>Respuesta correcta:</strong> ${esc(q.options[q.correct])}</p>
+            ${q.explain ? `<p>${esc(q.explain)}</p>` : ''}
+            ${resTitle ? `<button type="button" class="link-like" id="question-study-resource">Repasar: ${esc(resTitle)}</button>` : ''}
+          </div>
+          <div data-srs-test="${esc(c.testId)}" data-srs-index="${c.origIndex}">
+            <p class="count-note">Valoración SRS opcional. Puedes avanzar sin valorar.</p>
+            ${srsRateHtml(c.testId, c.origIndex, null)}
+          </div>` : ''}
+        <p id="question-study-status" role="status"></p>
+        <div class="quiz-actions">
+          ${!s.revealed ? '<button type="button" class="btn btn-primary" id="question-study-reveal">Mostrar respuesta</button>' : ''}
+          ${s.revealed && s.index + 1 < s.questions.length ? '<button type="button" class="btn btn-primary" id="question-study-next">Siguiente pregunta</button>' : ''}
+          <button type="button" class="btn" id="question-study-finish">Terminar sesión</button>
+        </div>
+      </div>`;
+    root.querySelector('#question-study-exit').addEventListener('click', () => renderStudy(root, s.onGuided));
+    const reveal = root.querySelector('#question-study-reveal');
+    if (reveal) reveal.addEventListener('click', () => {
+      if (s.index !== index || s.revealed || !studySessionCurrent(s, root)) return;
+      s.revealed = true;
+      s.studied += 1;
+      renderStudyQuestion(root);
+    });
+    const next = root.querySelector('#question-study-next');
+    if (next) next.addEventListener('click', () => {
+      if (s.index !== index || !studySessionCurrent(s, root)) return;
+      s.index += 1;
+      s.revealed = false;
+      s.rated = false;
+      renderStudyQuestion(root);
+    });
+    const resource = root.querySelector('#question-study-resource');
+    if (resource) resource.addEventListener('click', () => {
+      if (s.index === index && studySessionCurrent(s, root)) window.SMR.openResource(q.relatedResource);
+    });
+    wireSrsRating(root, s);
+    root.querySelector('#question-study-finish').addEventListener('click', () => {
+      if (!studySessionCurrent(s, root)) return;
+      s.finished = true;
+      const minutes = Math.max(0, Math.round((Date.now() - s.startedAt) / 60000));
+      if (s.studied) progress().recordStudySession(minutes, s.studied);
+      root.innerHTML = `<section class="panel" aria-labelledby="question-study-done">
+        <h2 id="question-study-done" tabindex="-1">Sesión terminada</h2>
+        <p>${s.studied ? `${s.studied} ${s.studied === 1 ? 'pregunta revelada' : 'preguntas reveladas'} · ${minutes} min. Sesión registrada.` : 'No has revelado preguntas. No se ha registrado una sesión.'}</p>
+        <button type="button" class="btn btn-primary" id="question-study-again">Volver a selección</button>
+      </section>`;
+      root.querySelector('#question-study-again').addEventListener('click', () => renderStudy(root, s.onGuided));
+      root.querySelector('#question-study-done').focus();
+    });
+    root.querySelector('.quiz-q').focus();
+  }
+
   function studyQuestion({ resourceId = null, excludeKeys = [] } = {}) {
     const exclude = new Set(excludeKeys);
     const take = (pool) => pool.filter((c) => !exclude.has(`${c.testId}:${c.origIndex}`));
@@ -1341,5 +1478,5 @@ window.SMR_TESTS = (function () {
     return blocks;
   }
 
-  return { render, searchEntries, stop, startSession, studyQuestion, studyBlocks };
+  return { render, renderStudy, searchEntries, stop, startSession, studyQuestion, studyBlocks };
 })();

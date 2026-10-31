@@ -2618,7 +2618,7 @@ function renderEstudio(root) {
     renderStudyStep(root);
     return;
   }
-  renderStudySetup(root);
+  window.SMR_TESTS.renderStudy(root, () => renderStudySetup(root));
 }
 
 function renderStudySetup(root) {
@@ -2626,6 +2626,8 @@ function renderStudySetup(root) {
   const sessions = (SMR.progress.data.studySessions || []).slice(-3).reverse();
 
   root.innerHTML = `
+    <h2>Sesión guiada</h2>
+    <button type="button" class="btn" id="guided-study-questions">Estudiar preguntas</button>
     <p class="count-note">El Modo Estudio genera una sesión guiada con lo que más te conviene: primero tus fallos,
       luego temas marcados como «todavía no» y recursos pendientes. Cada bloque alterna explicación, recurso y pregunta.</p>
     ${wrong ? `
@@ -2666,6 +2668,7 @@ function renderStudySetup(root) {
         <p class="empty-text">Con 10 minutos al día basta para mantener el ritmo. Elige una duración arriba.</p>
       </div>`}`;
 
+  root.querySelector('#guided-study-questions').addEventListener('click', () => window.SMR_TESTS.renderStudy(root, () => renderStudySetup(root)));
   root.querySelectorAll('[data-minutes]').forEach((btn) => {
     btn.addEventListener('click', () => startStudy(Number(btn.dataset.minutes), root));
   });
