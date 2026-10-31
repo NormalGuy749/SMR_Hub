@@ -1271,7 +1271,7 @@ window.SMR_TESTS = (function () {
       .map((item) => {
         const test = findTest(item.testId);
         const q = test && test.questions[item.qIndex];
-        return test && q ? { q, origIndex: item.qIndex, testId: item.testId } : null;
+        return test && q ? { q, origIndex: item.qIndex, testId: item.testId, testTitle: test.title, category: test.category || 'General' } : null;
       }).filter(Boolean))
       .filter((c) => !resourceId || c.q.relatedResource === resourceId);
     if (srsDue.length) return srsDue[Math.floor(Math.random() * srsDue.length)];
@@ -1280,7 +1280,7 @@ window.SMR_TESTS = (function () {
       .map((ref) => {
         const test = findTest(ref.testId);
         const q = test && test.questions[ref.qIndex];
-        return test && q ? { q, origIndex: ref.qIndex, testId: test.id } : null;
+        return test && q ? { q, origIndex: ref.qIndex, testId: test.id, testTitle: test.title, category: test.category || 'General' } : null;
       }).filter(Boolean));
 
     const fromWrong = wrongCandidates.filter((c) => !resourceId || c.q.relatedResource === resourceId);

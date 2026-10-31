@@ -2578,6 +2578,8 @@ function buildStudyPlan(minutes) {
     });
   }
 
+  if (!plan.length) return plan;
+
   plan.push({
     type: 'summary',
     title: 'Resumen de la sesión',
@@ -2588,7 +2590,7 @@ function buildStudyPlan(minutes) {
 }
 
 function studyQuestionHtml(step, done = false) {
-  const q = step.question;
+  const q = step.question && step.question.q;
   if (!q) {
     return `<p class="empty-text">No hay preguntas disponibles para este bloque.</p>`;
   }
@@ -2654,7 +2656,7 @@ function renderStudySetup(root) {
                 <span class="history-title">Sesión de estudio</span>
                 <span class="history-meta">${s.steps} pasos · ${timeAgo(s.ts)}</span>
               </span>
-              <span class="history-score is-ok">${s.minutes ? `${s.minutes} min` : 'libre'}</span>
+              <span class="history-score is-ok">${s.minutes} min</span>
             </li>`).join('')}
         </ul>
       </section>` : `
@@ -2747,10 +2749,10 @@ function renderStudyStep(root) {
     }
     body = `
       <p class="study-step-tag">${SMR.icon('zap', 13)} Pregunta rápida</p>
-      ${studyQuestionHtml(step)}
+      ${studyQuestionHtml(step, !!step.answered)}
       <div class="quiz-actions">
         <button type="button" class="btn" data-study-open-res="${step.resourceId}">${SMR.icon('book', 14)} Repasar el tema</button>
-        <button type="button" class="btn btn-primary" id="study-continue" hidden>Continuar ${SMR.icon('chevronRight', 14)}</button>
+        <button type="button" class="btn btn-primary" id="study-continue" ${step.question && !step.answered ? 'hidden' : ''}>Continuar ${SMR.icon('chevronRight', 14)}</button>
       </div>`;
   } else {
     body = `
@@ -2810,7 +2812,7 @@ function wireStudyStep(root, step) {
   });
 
   if (step.type === 'question' && step.question) {
-    const q = step.question;
+    const q = step.question.q;
     const optionBtns = [...root.querySelectorAll('.quiz-option')];
     optionBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -2842,9 +2844,9 @@ function finishStudy(root, auto) {
   stopStudyClock();
   if (studyState.finished) return;
   studyState.finished = true;
-  const elapsedMin = Math.max(1, Math.round((Date.now() - studyState.startedAt) / 60000));
+  const elapsedMin = Math.max(0, Math.round((Date.now() - studyState.startedAt) / 60000));
   const stepsDone = Math.max(0, studyState.index);
-  SMR.progress.recordStudySession(studyState.minutes || elapsedMin, stepsDone);
+  SMR.progress.recordStudySession(elapsedMin, stepsDone);
   studyState.active = false;
 
   root.innerHTML = `
