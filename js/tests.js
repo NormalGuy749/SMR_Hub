@@ -1273,8 +1273,10 @@ window.SMR_TESTS = (function () {
 
   function studyCandidates(selection) {
     const pool = allCandidates();
+    const byTopic = selection.startsWith('__tema:');
+    const topicIds = new Set(byTopic && window.SMR.questionsOfTopic ? SMR.questionsOfTopic(selection.slice(7)) : []);
     const refs = selection === '__errores' ? progress().wrongRefs() : selection === '__srs' ? progress().dueSrs() : null;
-    const selected = refs
+    const selected = byTopic ? pool.filter((c) => topicIds.has(window.SMR.srs && SMR.srs.idOf(c.testId, c.origIndex))) : refs
       ? refs.map((ref) => pool.find((c) => c.testId === ref.testId && c.origIndex === ref.qIndex)).filter(Boolean)
       : filterPool(pool, { category: selection });
     const seen = new Set();
@@ -1290,6 +1292,9 @@ window.SMR_TESTS = (function () {
     stop();
     session = null;
     const categories = [...new Set(allCandidates().map((c) => c.category))];
+    const topics = (window.SMR.topics ? SMR.topics.list : [])
+      .map((topic) => ({ topic, count: studyCandidates('__tema:' + topic.id).length }))
+      .filter((item) => item.count > 0);
     root.innerHTML = `
       <section class="panel" aria-labelledby="question-study-title">
         <h2 id="question-study-title" tabindex="-1">Estudiar preguntas</h2>
@@ -1299,6 +1304,9 @@ window.SMR_TESTS = (function () {
           <option value="">Todas las preguntas</option>
           <optgroup label="Por categoría">
             ${categories.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+          </optgroup>
+          <optgroup label="Por tema">
+            ${topics.map(({ topic, count }) => `<option value="__tema:${esc(topic.id)}">${esc(topic.name)} (${count})</option>`).join('')}
           </optgroup>
           <optgroup label="Repaso">
             <option value="__errores">Errores (${studyCandidates('__errores').length})</option>
@@ -1320,7 +1328,8 @@ window.SMR_TESTS = (function () {
       if (!questions.length) {
         root.querySelector('#question-study-status').textContent = selection === '__errores'
           ? 'No tienes preguntas con errores pendientes.' : selection === '__srs'
-            ? 'No tienes repasos pendientes.' : 'No hay preguntas disponibles para esta selección.';
+            ? 'No tienes repasos pendientes.' : selection.startsWith('__tema:')
+              ? 'No hay preguntas disponibles para este tema.' : 'No hay preguntas disponibles para esta selección.';
         return;
       }
       const ownerContract = window.SMR.cloudSession;
@@ -1350,6 +1359,7 @@ window.SMR_TESTS = (function () {
 
   function renderStudyQuestion(root) {
     const s = session;
+    const topic = s.source.startsWith('__tema:') && window.SMR.topics ? SMR.topics.list.find((t) => t.id === s.source.slice(7)) : null;
     const index = s.index;
     const c = s.questions[s.index];
     const q = c.q;
@@ -1364,7 +1374,7 @@ window.SMR_TESTS = (function () {
         <div class="quiz-progress" role="progressbar" aria-label="Preguntas reveladas" aria-valuemin="0" aria-valuemax="${s.questions.length}" aria-valuenow="${s.studied}" aria-valuetext="${s.studied} de ${s.questions.length} preguntas reveladas">
           <div class="quiz-progress-fill" style="width:${Math.round(s.studied / s.questions.length * 100)}%"></div>
         </div>
-        <p class="quiz-mode">Estudiar preguntas${s.source === '__errores' ? ' · Errores' : s.source === '__srs' ? ' · SRS pendientes' : ''} · ${esc(c.category)} · ${esc(c.testTitle)}</p>
+        <p class="quiz-mode">Estudiar preguntas${topic ? ' · ' + esc(topic.name) : s.source === '__errores' ? ' · Errores' : s.source === '__srs' ? ' · SRS pendientes' : ''} · ${esc(c.category)} · ${esc(c.testTitle)}</p>
         ${s.source === '__errores' ? '<p class="count-note">Estudiar no elimina el error. Para resolverlo, responde en el repaso evaluado de Tests.</p>' : ''}
         <h3 class="quiz-q" tabindex="-1">${esc(q.q)}</h3>
         <div class="quiz-options" role="list" aria-label="Opciones">

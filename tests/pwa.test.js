@@ -171,7 +171,7 @@ check('la cola offline se carga antes que app.js', () => {
 console.log('\nsw.js');
 
 check('versión de caché esperada', () => {
-  assert(loadWorker('/').state.CACHE_NAME === 'smr-hub:/:v4');
+  assert(loadWorker('/').state.CACHE_NAME === 'smr-hub:/:v5');
 });
 
 const PRE_CACHE = loadWorker('/').state.PRECACHE;
@@ -295,12 +295,25 @@ console.log('\njs/offline-store.js');
     for (const base of ['/', '/SMR_Hub/']) {
       const h = loadWorker(base);
       const stale = 'smr-hub:' + base + ':v2';
+      const previous = 'smr-hub:' + base + ':v4';
       const other = 'smr-hub:' + (base === '/' ? '/SMR_Hub/' : '/') + ':v2';
-      for (const key of [h.state.CACHE_NAME, stale, other, 'smr-hub-v1', 'otra-app']) await h.caches.open(key);
+      for (const key of [h.state.CACHE_NAME, stale, previous, other, 'smr-hub-v1', 'otra-app']) await h.caches.open(key);
       await h.lifecycle('activate');
       assert(h.deleted.includes(stale), 'no limpia su versión anterior');
+      assert(h.deleted.includes(previous), 'no retira la v4 al instalar los temas en v5');
       assert(h.deleted.includes('smr-hub-v1') === (base === '/'), 'migración v1 incorrecta');
       assert(!h.deleted.includes(other) && !h.deleted.includes('otra-app') && !h.deleted.includes(h.state.CACHE_NAME), 'borra cachés ajenas o actuales');
+    }
+  });
+  await check('temas y mapping se precargan y se sirven offline en ambas bases', async () => {
+    for (const base of ['/', '/SMR_Hub/']) {
+      const h = loadWorker(base);
+      await h.lifecycle('install');
+      for (const file of ['js/topics.js', 'js/questionTopics.js']) {
+        assert(h.added.includes(base + file), 'falta en precache: ' + base + file);
+        const response = await h.request('https://smr.test' + base + file, 'cors', 'script');
+        assert(response.status === 200 && await response.text() === 'cached:' + base + file, 'no disponible offline: ' + file);
+      }
     }
   });
   await check('la shell precacheada tras un redirect vuelve offline como respuesta sin redirect', async () => {

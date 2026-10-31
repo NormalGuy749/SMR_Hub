@@ -102,7 +102,8 @@ check('categorías: solo las siete editoriales con preguntas', (h) => {
   const cats = new Set(h.g.SMR_DATA.tests.filter((t) => t.questions.length).map((t) => t.category));
   assert.equal(cats.size, 7);
   cats.forEach((cat) => assert.ok(h.root.innerHTML.includes(`<option value="${cat}">`)));
-  assert.equal((h.root.innerHTML.match(/<option/g) || []).length, 10);
+  const group = h.root.innerHTML.match(/<optgroup label="Por categoría">([\s\S]*?)<\/optgroup>/)[1];
+  assert.equal((group.match(/<option/g) || []).length, 7);
 });
 
 check('por categoría: solo sus preguntas y procedencia del test original', (h) => {

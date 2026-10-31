@@ -10,7 +10,7 @@ importScripts('js/routing.js');
 
 const BASE_PATH = new URL('./', self.location.href).pathname;
 const CACHE_PREFIX = 'smr-hub:' + BASE_PATH + ':';
-const CACHE_NAME = CACHE_PREFIX + 'v4';
+const CACHE_NAME = CACHE_PREFIX + 'v5';
 
 /* El directorio del worker es también el ámbito público de la aplicación. */
 const PRECACHE = [
@@ -28,6 +28,8 @@ const PRECACHE = [
   'js/questions.js',
   'js/seo-content.js',
   'js/srs.js',
+  'js/topics.js',
+  'js/questionTopics.js',
   'js/tools.js',
   'js/tests.js',
   'js/pdf-export.js',

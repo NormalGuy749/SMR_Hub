@@ -61,7 +61,7 @@ function load() {
   };
   g.window = g;
   vm.createContext(g);
-  for (const f of ['data', 'content', 'questions', 'srs']) vm.runInContext(fs.readFileSync('js/' + f + '.js', 'utf8'), g);
+  for (const f of ['data', 'content', 'questions', 'srs', 'topics', 'questionTopics']) vm.runInContext(fs.readFileSync('js/' + f + '.js', 'utf8'), g);
   Object.assign(g.SMR, {
     esc: String, icon: () => '',
     store: {
