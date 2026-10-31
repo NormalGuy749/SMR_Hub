@@ -1161,7 +1161,10 @@ window.SMR_TESTS = (function () {
           b.setAttribute('aria-pressed', String(active));
           if (study) b.disabled = true;
         });
-        if (study) root.querySelector('#question-study-status').textContent = 'Valoración guardada.';
+        if (study) {
+          root.querySelector('#question-study-status').textContent = 'Valoración guardada.';
+          (root.querySelector('#question-study-next') || root.querySelector('#question-study-finish')).focus();
+        }
         /* la tarjeta ya existe (o revive): la acción de quitar vuelve */
         syncSrsDrop(li, li.dataset.srsTest, Number(li.dataset.srsIndex));
       });
@@ -1289,7 +1292,7 @@ window.SMR_TESTS = (function () {
     const categories = [...new Set(allCandidates().map((c) => c.category))];
     root.innerHTML = `
       <section class="panel" aria-labelledby="question-study-title">
-        <h2 id="question-study-title">Estudiar preguntas</h2>
+        <h2 id="question-study-title" tabindex="-1">Estudiar preguntas</h2>
         <p class="count-note">Repasa a tu ritmo: muestra la respuesta y valora si la sabías. Sin nota y sin modificar tus errores ni resultados de tests.</p>
         <label class="test-opt" for="question-study-category">Qué quieres estudiar</label>
         <select class="input" id="question-study-category">
@@ -1331,6 +1334,7 @@ window.SMR_TESTS = (function () {
       if (!studySessionCurrent(study, root)) return;
       renderStudyQuestion(root);
     });
+    root.querySelector('#question-study-title').focus();
   }
 
   function studySessionCurrent(study, root) {
@@ -1357,6 +1361,9 @@ window.SMR_TESTS = (function () {
           <p class="quiz-counter">Pregunta ${s.index + 1} de ${s.questions.length}</p>
           <p>${s.studied} ${s.studied === 1 ? 'revelada' : 'reveladas'}</p>
         </div>
+        <div class="quiz-progress" role="progressbar" aria-label="Preguntas reveladas" aria-valuemin="0" aria-valuemax="${s.questions.length}" aria-valuenow="${s.studied}" aria-valuetext="${s.studied} de ${s.questions.length} preguntas reveladas">
+          <div class="quiz-progress-fill" style="width:${Math.round(s.studied / s.questions.length * 100)}%"></div>
+        </div>
         <p class="quiz-mode">Estudiar preguntas${s.source === '__errores' ? ' · Errores' : s.source === '__srs' ? ' · SRS pendientes' : ''} · ${esc(c.category)} · ${esc(c.testTitle)}</p>
         ${s.source === '__errores' ? '<p class="count-note">Estudiar no elimina el error. Para resolverlo, responde en el repaso evaluado de Tests.</p>' : ''}
         <h3 class="quiz-q" tabindex="-1">${esc(q.q)}</h3>
@@ -1364,13 +1371,13 @@ window.SMR_TESTS = (function () {
           ${q.options.map((opt, i) => `<div class="quiz-option" role="listitem"><span class="opt-letter mono">${String.fromCharCode(97 + i)})</span> ${esc(opt)}</div>`).join('')}
         </div>
         ${s.revealed ? `
-          <div class="quiz-explain" role="status">
+          <div class="quiz-explain" id="question-study-answer" role="status" tabindex="-1">
             <p><strong>Respuesta correcta:</strong> ${esc(q.options[q.correct])}</p>
             ${q.explain ? `<p>${esc(q.explain)}</p>` : ''}
             ${resTitle ? `<button type="button" class="link-like" id="question-study-resource">Repasar: ${esc(resTitle)}</button>` : ''}
           </div>
           <div data-srs-test="${esc(c.testId)}" data-srs-index="${c.origIndex}">
-            <p class="count-note">Valoración SRS opcional. Puedes avanzar sin valorar.</p>
+            <p class="count-note">Valoración SRS opcional. El próximo repaso solo cambia al valorar.</p>
             ${srsRateHtml(c.testId, c.origIndex, null)}
           </div>` : ''}
         <p id="question-study-status" role="status"></p>
@@ -1414,7 +1421,7 @@ window.SMR_TESTS = (function () {
       root.querySelector('#question-study-again').addEventListener('click', () => renderStudy(root, s.onGuided));
       root.querySelector('#question-study-done').focus();
     });
-    root.querySelector('.quiz-q').focus();
+    root.querySelector(s.revealed ? '#question-study-answer' : '.quiz-q').focus();
   }
 
   function studyQuestion({ resourceId = null, excludeKeys = [] } = {}) {

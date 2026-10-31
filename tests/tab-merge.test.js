@@ -28,6 +28,7 @@ function slice(from, to) {
 const STORE_SRC = slice("const STORE_PREFIX = 'smrhub:';", '/* ---------- Iconos (');
 const MERGE_SRC = slice('const ACTIVITY_LIMIT = 40;', 'function dayKey(');
 const SAVE_SRC = slice('  otherSlot() { return SMR.store.get', '  /* --- Recursos --- */');
+const STUDY_SRC = slice('  recordStudySession(minutes, steps) {', '  studyMinutes()');
 
 const UID_A = 'uid-A';
 const UID_B = 'uid-B';
@@ -39,7 +40,7 @@ function progressWith(o) {
   return {
     resources: { viewed: {}, completed: p.completed || {}, selfAssessment: {} },
     tests: { best: p.best || {}, last: {}, history: p.history || [], wrong: {}, srs: p.srs || {}, srsLegacy: p.srsLegacy || {} },
-    cases: { solved: {} }, studySessions: [], studyMinutes: 0, activity: p.activity || [],
+    cases: { solved: {} }, studySessions: p.studySessions || [], studyMinutes: p.studyMinutes || 0, activity: p.activity || [],
     streak: { lastDay: null, count: 0 }, v: 4
   };
 }
@@ -191,6 +192,7 @@ function makeTab(bus, opts) {
     this.save();
   };
   progress.touchStreak = function () { return true; };
+  progress.recordStudySession = new Function('return { ' + STUDY_SRC + ' }.recordStudySession;')();
   progress.logActivity = function (type, label, meta) {
     this.data.activity.push({ type, label, meta: meta || '', ts: Date.now() });
     this.save();
@@ -585,6 +587,63 @@ function seedAccount(bus, uid, progressObj) {
     assert(live13.indexOf('r-vis') !== -1, 'y el contenido del visitante sigue vivo: ' + JSON.stringify(live13));
   })();
   record('error síncrono al pedir el lock: no escapa al manejador y no se ejecuta sin exclusión');
+
+  for (const durations of [[5, 7], [5, 5]]) {
+    const { t1, t2 } = twoTabs({ tab1: { noCloud: true }, tab2: { noCloud: true } });
+    t1.progress.recordStudySession(durations[0], 1);
+    t2.progress.recordStudySession(durations[1], 2);
+    let saved = t2.live('progress');
+    assert(saved.studySessions.length === 2, 'se perdió una sesión al guardar desde una copia anterior');
+    assert(saved.studyMinutes === durations[0] + durations[1], 'se perdieron minutos acumulados: ' + saved.studyMinutes);
+    t1.progress.save();
+    t2.progress.save();
+    saved = t2.live('progress');
+    assert(saved.studySessions.length === 2 && saved.studyMinutes === durations[0] + durations[1], 'guardar otra vez duplicó o perdió estudio');
+    record('dos pestañas terminan estudio ' + durations.join('+') + ': conserva sesiones y minutos sin duplicar');
+  }
+
+  await (async () => {
+    const seed = progressWith({ studyMinutes: 1000, studySessions: Array.from({ length: 20 }, (_, i) => ({ ts: i + 1, minutes: 1, steps: 1 })) });
+    const { t1, t2 } = twoTabs({ seed: [[P + 'progress', JSON.stringify(seed)]], tab1: { noCloud: true }, tab2: { noCloud: true } });
+    t1.progress.recordStudySession(2, 2);
+    t2.progress.recordStudySession(3, 3);
+    const saved = t2.live('progress');
+    assert(saved.studySessions.length === 20, 'no respeta el límite de sesiones recientes');
+    assert(saved.studyMinutes === 1005, 'se perdió el total histórico al recortar sesiones: ' + saved.studyMinutes);
+    assert(saved.studySessions.some((s) => s.steps === 2) && saved.studySessions.some((s) => s.steps === 3), 'se perdió una sesión nueva');
+  })();
+  record('conserva minutos históricos y las dos sesiones nuevas al limitar el historial');
+
+  await (async () => {
+    const bus = makeBus();
+    seedAccount(bus, UID_A, progressWith({}));
+    bus.seed(P + 'progressByOwner:' + UID_B, JSON.stringify({ slot: { progress: progressWith({}) }, savedAt: 1, v: 1 }));
+    const { t1, t2 } = reload(bus);
+    t1.auth(user(UID_A)); t2.auth(user(UID_A)); await flush();
+    t1.progress.recordStudySession(5, 1);
+    t2.progress.recordStudySession(7, 2);
+    assert(t2.live('progress').studyMinutes === 12, 'la cuenta A perdió sesiones');
+    t1.auth(user(UID_B)); await flush();
+    assert(t1.progress.data.studyMinutes === 0 && t1.progress.data.studySessions.length === 0, 'A contaminó B');
+    t1.progress.recordStudySession(3, 3);
+    t1.auth(null); await flush();
+    assert(t1.progress.data.studyMinutes === 0, 'B contaminó al visitante');
+    t1.progress.recordStudySession(2, 4);
+    t1.auth(user(UID_A)); await flush();
+    assert(t1.progress.data.studyMinutes === 12 && t1.progress.data.studySessions.length === 2, 'visitante/B contaminó A');
+  })();
+  record('sesiones y minutos aislados entre A, B y visitante');
+
+  await (async () => {
+    const { t1, t2 } = twoTabs();
+    t1.progress.data.studySessions.push({ ts: Date.now() + 100000, minutes: 5, steps: 1 });
+    t1.progress.data.studyMinutes = 5;
+    t1.progress.save();
+    t2.progress.recordStudySession(7, 2);
+    const queue = t2.store.get('progressSyncQueue:guest', {});
+    assert((queue.sessions || []).some((s) => s.minutes === 7 && s.steps === 2), 'el hook cloud encoló la sesión ajena, no la recién terminada');
+  })();
+  record('el hook cloud encola la sesión propia aunque otra tenga una fecha posterior');
 
   if (process.env.TAB_MERGE_SELFTEST === '1') {
     await (async () => { assert(1 === 2, 'auto-verificación: aserción forzada a fallar'); })();

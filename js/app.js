@@ -67,6 +67,7 @@ SMR.store = {
     return v;
   },
   writeMerged(key, data, other) {
+    /* shortcut: read/merge/write no es transaccional entre procesos; usar exclusión compartida si se exige atomicidad. */
     const base = this.written[key];
     const theirs = other === undefined ? this.get(key, null) : other;
     /* base === undefined → esta pestaña nunca leyó la clave: no se fusiona.
@@ -253,9 +254,9 @@ const HISTORY_LIMIT = 60;
 /* ---------- Fusión de escrituras entre pestañas ---------- */
 
 /* Listas acumulativas: se unen por entrada en vez de sustituirse.
-   `path` es la ruta real desde la raíz del objeto de progreso. Las listas no
-   listadas (studySessions, etc.) mantienen la semántica ya establecida. */
+   `path` es la ruta real desde la raíz del objeto de progreso. */
 const SLOT_ARRAYS = {
+  studySessions: { key: (x) => x && (x.ts + '\u0000' + x.minutes + '\u0000' + x.steps), sort: (a, b) => ((a && a.ts) || 0) - ((b && b.ts) || 0), limit: 20 },
   activity: { key: (x) => x && (x.ts + '\u0000' + x.type + '\u0000' + x.label + '\u0000' + x.meta), sort: (a, b) => (a.ts || 0) - (b.ts || 0), limit: ACTIVITY_LIMIT },
   'tests.history': { key: (x) => x && (x.ts + '\u0000' + x.mode + '\u0000' + x.testId + '\u0000' + x.score), sort: (a, b) => (a.ts || 0) - (b.ts || 0), limit: HISTORY_LIMIT }
 };
@@ -323,6 +324,16 @@ function slotMergeObject(path, base, mine, theirs) {
     }
     out[k] = slotMergeValue(path ? path + '.' + k : k, b[k], mine[k], theirs[k]);
   });
+  if (!path && Array.isArray(mine.studySessions) && Array.isArray(theirs.studySessions)) {
+    const key = SLOT_ARRAYS.studySessions.key;
+    const known = new Set((Array.isArray(b.studySessions) ? b.studySessions : []).map(key));
+    const added = new Map();
+    mine.studySessions.concat(theirs.studySessions).forEach((s) => { if (!known.has(key(s))) added.set(key(s), s); });
+    const minutes = (value) => Number.isFinite(value) && value >= 0 ? value : 0;
+    const newMinutes = [...added.values()].reduce((n, s) => n + minutes(s && s.minutes), 0);
+    /* El total conserva sesiones antiguas ya fuera de las 20 recientes. */
+    out.studyMinutes = Math.max(minutes(mine.studyMinutes), minutes(theirs.studyMinutes), minutes(b.studyMinutes) + newMinutes);
+  }
   return out;
 }
 
@@ -678,10 +689,12 @@ SMR.progress = {
   /* --- Sesiones de estudio --- */
 
   recordStudySession(minutes, steps) {
-    this.data.studySessions.push({ ts: Date.now(), minutes, steps });
+    const session = { ts: Date.now(), minutes, steps };
+    this.data.studySessions.push(session);
     if (this.data.studySessions.length > 20) this.data.studySessions = this.data.studySessions.slice(-20);
     this.data.studyMinutes = (this.data.studyMinutes || 0) + (minutes || 0);
     this.logActivity('estudio', 'Sesión de estudio completada', `${minutes} min · ${steps} pasos`);
+    return session;
   },
 
   studyMinutes() { return this.data.studyMinutes || 0; },
@@ -1015,7 +1028,7 @@ function renderHome(root) {
   const strongest = masteryList.length ? masteryList.reduce((a, b) => (b.mastery > a.mastery ? b : a)) : null;
 
   const studySessions = SMR.progress.data.studySessions || [];
-  const hasProgress = g.viewed > 0 || g.testsDone > 0 || g.done > 0;
+  const hasProgress = g.viewed > 0 || g.testsDone > 0 || g.done > 0 || studySessions.length > 0 || studyMin > 0 || activity.length > 0 || g.streak > 0 || Object.keys(SMR.progress.data.tests.srs).length > 0;
 
   root.innerHTML = `
     ${window.SMR_SEO.home()}
@@ -1036,8 +1049,8 @@ function renderHome(root) {
     <section class="panel continue-panel" aria-label="Primeros pasos">
       <div class="continue-main">
         <p class="section-label">${SMR.icon('compass', 13)} Primeros pasos</p>
-        <h3 class="continue-title">Empieza con una sesión de estudio guiada</h3>
-        <p class="continue-meta">10 minutos bastan: el Modo Estudio mezcla lecciones cortas, recursos y preguntas.</p>
+        <h3 class="continue-title">${hasProgress ? 'Continúa estudiando a tu ritmo' : 'Empieza a estudiar a tu ritmo'}</h3>
+        <p class="continue-meta">Elige preguntas para repasar o una sesión guiada con lecciones y recursos.</p>
       </div>
       <a class="btn btn-primary" href="estudio">Probar el modo estudio</a>
     </section>`}
@@ -1189,7 +1202,7 @@ function renderHome(root) {
           </div>`}
         ${studySessions.length ? `
           <h3 class="section-label follow-label">Estudio</h3>
-          <p class="count-note">${studySessions.length === 1 ? '1 sesión completada' : `${studySessions.length} sesiones completadas`} en total.</p>
+          <p class="count-note">${studySessions.length === 1 ? '1 sesión reciente' : `${studySessions.length} sesiones recientes`}.</p>
         ` : ''}
       </section>
     </div>`;
@@ -2680,13 +2693,17 @@ function startStudy(minutes, root) {
     renderStudySetup(root);
     return;
   }
+  studyState.data = SMR.progress.data;
+  studyState.ownerContract = SMR.cloudSession;
+  studyState.ownerToken = SMR.cloudSession ? SMR.cloudSession.token() : null;
+  studyState.finished = false;
+  if (!studyOwnerCurrent()) { finishStudy(root, false); return; }
   studyState.active = true;
   studyState.steps = plan;
   studyState.index = 0;
   studyState.startedAt = Date.now();
   studyState.minutes = minutes;
   studyState.usedQ = [];
-  studyState.finished = false;
   startStudyClock(root);
   renderStudyStep(root);
 }
@@ -2694,6 +2711,7 @@ function startStudy(minutes, root) {
 function startStudyClock(root) {
   stopStudyClock();
   studyState.timerId = window.setInterval(() => {
+    if (!studyOwnerCurrent()) { finishStudy(root, false); return; }
     const el = document.querySelector('#study-clock');
     if (!el) return;
     const elapsedSec = Math.floor((Date.now() - studyState.startedAt) / 1000);
@@ -2723,7 +2741,14 @@ function currentStudyStep() {
   return studyState.steps[studyState.index];
 }
 
+function studyOwnerCurrent() {
+  const c = SMR.cloudSession;
+  return SMR.progress.data === studyState.data && c === studyState.ownerContract
+    && (c ? (studyState.ownerToken.owner !== '__unknown__' && !c.transitionPending() && c.isCurrent(studyState.ownerToken)) : !SMR.cloudAvailable);
+}
+
 function renderStudyStep(root) {
+  if (!studyOwnerCurrent()) { finishStudy(root, false); return; }
   const step = currentStudyStep();
   if (!step) { finishStudy(root, false); return; }
 
@@ -2811,7 +2836,10 @@ function wireStudyStep(root, step) {
   }
 
   root.querySelectorAll('[data-study-open-res]').forEach((btn) => {
-    btn.addEventListener('click', () => openResource(btn.dataset.studyOpenRes));
+    btn.addEventListener('click', () => {
+      if (!studyOwnerCurrent()) { finishStudy(root, false); return; }
+      openResource(btn.dataset.studyOpenRes);
+    });
   });
 
   if (step.type === 'question' && step.question) {
@@ -2847,10 +2875,14 @@ function finishStudy(root, auto) {
   stopStudyClock();
   if (studyState.finished) return;
   studyState.finished = true;
+  studyState.active = false;
+  if (!studyOwnerCurrent()) {
+    root.innerHTML = '<p class="notice" role="status">La cuenta cambió o está cambiando. Vuelve a iniciar una sesión.</p><a class="btn" href="estudio">Volver a Modo Estudio</a>';
+    return;
+  }
   const elapsedMin = Math.max(0, Math.round((Date.now() - studyState.startedAt) / 60000));
   const stepsDone = Math.max(0, studyState.index);
   SMR.progress.recordStudySession(elapsedMin, stepsDone);
-  studyState.active = false;
 
   root.innerHTML = `
     <div class="empty">
@@ -3071,13 +3103,16 @@ function sparkline(values) {
 
 function renderEstadisticas(root) {
   const g = SMR.progress.globalStats();
+  const sessions = SMR.progress.data.studySessions;
+  const activity = SMR.progress.recentActivity(6);
+  const studyMin = SMR.progress.studyMinutes();
 
-  if (!g.viewed && !g.testsDone && !g.done) {
+  if (!g.viewed && !g.testsDone && !g.done && !sessions.length && !studyMin && !activity.length && !g.streak && !Object.keys(SMR.progress.data.tests.srs).length) {
     root.innerHTML = `
       <div class="empty">
         ${SMR.icon('chart', 22)}
         <p class="empty-title">Todavía no hay datos que mostrar</p>
-        <p class="empty-text">Estudia un recurso o completa un test y tus estadísticas aparecerán aquí. Todo se guarda en este navegador.</p>
+        <p class="empty-text">Termina una sesión de estudio, estudia un recurso o completa un test para ver tu actividad. Todo se guarda en este navegador.</p>
         <div class="empty-actions">
           <a class="btn btn-primary" href="estudio">Probar el modo estudio</a>
           <a class="btn" href="recursos">Explorar recursos</a>
@@ -3102,7 +3137,6 @@ function renderEstadisticas(root) {
     return q ? { testTitle: test.title, question: q.q, count: ref.count } : null;
   }).filter(Boolean);
 
-  const studyMin = SMR.progress.studyMinutes();
   const dueSrs = SMR.progress.dueCount();
   const scheduledSrs = SMR.progress.upcomingSrsCount();
 
@@ -3115,8 +3149,16 @@ function renderEstadisticas(root) {
       ${statCard(String(g.streak), g.streak === 1 ? 'Día de racha' : 'Días de racha')}
       ${statCard(String(g.wrong), 'Preguntas falladas')}
       ${statCard(String(dueSrs), 'Repasos vencidos', scheduledSrs ? `${scheduledSrs} programados` : 'sin programar')}
-      ${statCard(`${Math.floor(studyMin / 60)}h ${studyMin % 60}m`, 'Tiempo de estudio', 'sesiones guiadas')}
+      ${statCard(`${Math.floor(studyMin / 60)}h ${studyMin % 60}m`, 'Tiempo de estudio', sessions.length === 1 ? '1 sesión reciente' : `${sessions.length} sesiones recientes`)}
     </div>
+
+    ${activity.length ? `<section class="panel" aria-labelledby="stats-activity">
+      <h3 class="section-label" id="stats-activity">Actividad reciente</h3>
+      <ul class="activity-list">${activity.map((a) => `<li class="activity-item">
+        <span class="activity-text"><span class="activity-label">${SMR.esc(a.label)}</span>${a.meta ? `<span class="activity-meta">${SMR.esc(a.meta)}</span>` : ''}</span>
+        <span class="activity-time">${timeAgo(a.ts)}</span>
+      </li>`).join('')}</ul>
+    </section>` : ''}
 
     <section class="panel" aria-labelledby="stats-cats">
       <h3 class="section-label" id="stats-cats">${SMR.icon('chart', 13)} Progreso por categoría</h3>
@@ -3490,7 +3532,7 @@ function render() {
   const route = ROUTES[id];
   setActiveNav(id);
   dom.pageTitle.textContent = route.h1 || route.title;
-  dom.pageDesc.textContent = route.desc;
+  dom.pageDesc.textContent = id === 'estudio' ? 'Repasa preguntas a tu ritmo o inicia una sesión guiada.' : route.desc;
   updateMetadata(route, id);
   try {
     route.render(dom.content);

@@ -456,7 +456,8 @@
     const result = origRecordStudySession.call(SMR.progress, minutes, steps);
     try {
       const sessions = SMR.progress.data.studySessions;
-      const last = sessions[sessions.length - 1];
+      /* La unión local puede dejar una sesión ajena al final del historial. */
+      const last = result || sessions[sessions.length - 1];
       if (last && last.ts) {
         enqueueEvent('sessions', {
           minutes: last.minutes || 0, steps: last.steps || 0, created_at: last.ts

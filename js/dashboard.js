@@ -164,8 +164,7 @@ window.SMR.dashboard = (function () {
     }
 
     const history = testsRef.history || [];
-    /* Cada pregunta respondida es una tarjeta repasada: el motor no guarda la
-       fecha de revisión de cada tarjeta, sí el total de cada test. */
+    /* El total del intento incluye preguntas sin responder; no mide revelados ni revisiones SRS. */
     const cardsToday = history
       .filter((h) => h && typeof h.date === 'number' && dayKeyOf(h.date) === todayKey)
       .reduce((n, h) => n + (typeof h.total === 'number' ? h.total : 0), 0);
@@ -202,8 +201,8 @@ window.SMR.dashboard = (function () {
     root.innerHTML = `
       <div class="stat-cards">
         ${statCard(String(habits.streak), habits.streak === 1 ? 'Día de racha' : 'Días de racha', habits.daysStudied ? `${habits.daysStudied} ${habits.daysStudied === 1 ? 'día' : 'días'} con actividad` : 'empieza hoy')}
-        ${statCard(String(habits.cardsToday), 'Tarjetas hoy', habits.cardsToday ? 'preguntas respondidas' : 'ninguna todavía')}
-        ${statCard(habits.accuracy === null ? '—' : `${habits.accuracy}%`, 'Precisión global', `${pending.length} en cola de repaso`)}
+        ${statCard(String(habits.cardsToday), 'Preguntas de tests hoy', habits.cardsToday ? 'incluidas en intentos de hoy' : 'ninguna todavía')}
+        ${statCard(habits.accuracy === null ? '—' : `${habits.accuracy}%`, 'Aciertos en tests', `${pending.length} en cola de repaso`)}
         ${statCard(`${globalPct}%`, 'Maestría media', `${modules.length} módulos`)}
       </div>
 
@@ -211,7 +210,7 @@ window.SMR.dashboard = (function () {
         <h3 class="section-label" id="dash-review">${icon('zap', 13)} Repaso inteligente</h3>
         <p class="count-note">${pending.length
           ? `${pending.length} ${pending.length === 1 ? 'pregunta vencida o fallada' : 'preguntas vencidas o falladas'}. La sesión empieza por lo más urgente: primero los repasos vencidos y después las de mayor tasa de fallo.`
-          : 'No hay nada vencido ni fallado. Haz un test y el plan se llena solo.'}</p>
+          : 'No hay nada vencido ni fallado. Valora preguntas en Modo Estudio o haz un test para preparar el repaso.'}</p>
         <div class="quiz-actions">
           <button type="button" class="btn btn-primary" id="dash-start"${queue.length ? '' : ' disabled'}>
             Iniciar Repaso Inteligente${queue.length ? ` · ${queue.length}` : ''}

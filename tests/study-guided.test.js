@@ -27,7 +27,7 @@ function rootElement() {
           dataset: Object.fromEntries(Object.entries(attrs).filter(([k]) => k.startsWith('data-'))
             .map(([k, v]) => [k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), v])),
           classList: { add: (c) => classes.add(c), toggle: (c, active) => active ? classes.add(c) : classes.delete(c) },
-          focus() {},
+          focus() { this.focused = true; },
           setAttribute(k, v) { attrs[k] = v; },
           closest(sel) { return nodes.find((n) => matches(n, sel)) || null; },
           querySelector(sel) { return nodes.find((n) => matches(n, sel)) || null; },
