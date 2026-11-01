@@ -283,7 +283,8 @@
 
   async function handleSession(session) {
     const user = session ? session.user : null;
-    const wasSignedIn = !!state.user;
+    const changed = (state.user && state.user.id) !== (user && user.id);
+    if (changed) state.profileEnsured = false;
     state.user = user;
     if (!user) {
       state.profileEnsured = false;
@@ -295,12 +296,9 @@
       }
     }
     refreshWidget();
-    if (user) {
-      await ensureProfile(user);
-      if (!wasSignedIn) announce();
-    } else if (wasSignedIn) {
-      announce();
-    }
+    /* Anunciar el dueño antes de esperar red; un provisioning tardío no anuncia otra sesión. */
+    if (changed) announce();
+    if (user) await ensureProfile(user);
   }
 
   async function init() {
