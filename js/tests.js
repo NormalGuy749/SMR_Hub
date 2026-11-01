@@ -342,7 +342,7 @@ window.SMR_TESTS = (function () {
     if (a.streak >= 2) level = Math.min(2, level + 1);
     else if (a.streak <= -2) level = Math.max(0, level - 1);
     a.level = level;
-    a.streak = 0;
+    if (Math.abs(a.streak) >= 2) a.streak = 0;
 
     const candidate = nextAdaptiveCandidate(level);
     if (!candidate) { renderResult(root); return; }
@@ -694,10 +694,10 @@ window.SMR_TESTS = (function () {
 
         optionBtns.forEach((b) => {
           b.disabled = true;
-          if (Number(b.dataset.i) === q.correct) b.classList.add('correct');
+          if (s.cfg.explain && Number(b.dataset.i) === q.correct) b.classList.add('correct');
           b.setAttribute('aria-disabled', 'true');
         });
-        if (!ok) btn.classList.add('wrong');
+        if (s.cfg.explain && !ok) btn.classList.add('wrong');
 
         if (s.cfg.explain) {
           const parts = [];
@@ -715,7 +715,7 @@ window.SMR_TESTS = (function () {
         } else {
           explainEl.innerHTML = '<strong>Respuesta registrada.</strong> El detalle se muestra al finalizar el examen.';
         }
-        explainEl.className = `quiz-explain ${ok ? 'ok' : 'bad'}`;
+        explainEl.className = s.cfg.explain ? `quiz-explain ${ok ? 'ok' : 'bad'}` : 'quiz-explain';
         explainEl.hidden = false;
         nextBtn.hidden = false;
         if (!isExam) root.querySelector('.quiz-score').textContent = `Aciertos: ${s.correct}`;
@@ -738,7 +738,7 @@ window.SMR_TESTS = (function () {
     nextBtn.addEventListener('click', () => {
       if (s.adaptive) {
         const last = s.answers[s.answers.length - 1];
-        s.adaptive.streak = last && last.ok ? (s.adaptive.streak + 1) : (s.adaptive.streak - 1);
+        s.adaptive.streak = last && last.ok ? Math.max(0, s.adaptive.streak) + 1 : Math.min(0, s.adaptive.streak) - 1;
         s.index += 1;
         renderAdaptiveQuestion(root);
         return;
