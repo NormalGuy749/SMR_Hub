@@ -2,7 +2,7 @@
 
 ## Roadmap vigente — actualizado 2026-11-01
 
-Base actual: `801c006cfd83cf85d8ed88e3507536398c5418a5` — `fix(progress): preservar historial entre pestañas`, rama main. Auditoría maestra de base: 2026-10-31 (b0ad8b2); esta revisión documental solo cierra P1-A/H1. La referencia principal es SMR_HUB_CONTEXT.md, “ESTADO CANÓNICO ACTUAL”. No se certificó el estado desplegado ni se consultó producción.
+Base actual: `ad2eb227b5b4645ccf67f9e29a392eb1c7aeb33a` — `fix(auth): propagar cambios directos de propietario`, rama main. Auditoría maestra de base: 2026-10-31 (b0ad8b2); esta revisión recoge P1-A/H1 y clasifica H2 como CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL. La referencia principal es SMR_HUB_CONTEXT.md, “ESTADO CANÓNICO ACTUAL”. No se certificó el estado desplegado ni se consultó producción.
 
 Este documento propone el siguiente trabajo; no autoriza implementarlo automáticamente. Esta fase solo actualizó CONTEXT y ROADMAP. No hubo cambios funcionales, commit, push, deploy o migraciones. Antes de cada tarea: comprobar Git, preservar todos los cambios y ajustar alcance a código/tests actuales.
 
@@ -12,11 +12,11 @@ Este documento propone el siguiente trabajo; no autoriza implementarlo automáti
 | --- | --- | --- |
 | 6D.1–6D.9: índices y relaciones | Capas implementadas | 227 instancias de módulo, 55 temas, mappings de preguntas/contenido/módulos y equivalencias; validadores actuales sin errores. No todas las capas tienen UI; algunos scratch antiguos fallan por contratos obsoletos. |
 | 7: interfaz | Integrada | Navegación responsive, modales, paleta/búsqueda, ajustes y superficies educativas; smoke local escritorio/móvil. No equivale a auditoría WCAG o hardware físico completa. |
-| 8.1–8.4: foundation/auth/perfil/progreso | Implementado con partes incompletas | Cliente, colas y slots presentes; guards/RLS cubiertos estáticamente y con mocks. H2/H5 impiden llamarlo terminado extremo a extremo. |
+| 8.1–8.4: foundation/auth/perfil/progreso | Implementado con partes incompletas | Cliente, colas y slots presentes; guards/RLS cubiertos estáticamente y con mocks. La validación backend real de H2 y H5 impiden llamarlo terminado extremo a extremo. |
 | 8.5: SRS cloud | Adaptador y UI implementados | Identidad v4, merge_srs_cards, ratings, drop con confirmación, tombstones/revive y guards. SQL desplegado y conflictos de producto pendientes de evidencia/decisión. |
-| 8.5.8–8.5.14: hardening | Mecanismos integrados | Snapshot al login, liveOwner/liveWriter, fusión por dominio y marcas tras await. No repetir fases completas por sus antiguos pendientes; H1 RESUELTO en 801c006; resolver H2. |
+| 8.5.8–8.5.14: hardening | Mecanismos integrados | Snapshot al login, liveOwner/liveWriter, fusión por dominio y marcas tras await. No repetir fases completas por sus antiguos pendientes; H1 RESUELTO en 801c006; H2 corregido en cliente, pendiente validación backend real. |
 | Parte de 8.6: cuenta | Login, registro, logout y recuperación implementados | Cambio de contraseña disponible desde recuperación. No siguen siendo funciones futuras; falta completar el ciclo descrito abajo. |
-| Parte de 8.7: seguridad | Guardas y esquema implementados | Config loopback, dueño/slot/generación, locks fail-closed, RLS, permisos RPC y rate limits. La auditoría real de backend actual y H2 siguen pendientes. |
+| Parte de 8.7: seguridad | Guardas y esquema implementados | Config loopback, dueño/slot/generación, locks fail-closed, RLS, permisos RPC y rate limits. La auditoría real de backend actual y la validación Supabase/RLS de H2 siguen pendientes. |
 | Parte de 8.8 / 9.2: feedback | UI y RPC implementados | Comentarios/reportes autenticados, explícitos y validados. No hay administración de envíos ni analítica de uso. |
 | Correcciones del 26 de octubre | Cerradas en código | openResource expuesto, revaloración SRS repetida, segundo PDF lee formulario nuevo y dashboard conserva orden. Commit 30d9c1b; regresiones actuales pasan. |
 | P0 routing | Cerrado | 404 versionado, Cloudflare/mirror, barras, historial y SW; navegador real local: 132 entradas, 132 recargas, 66 offline. No reabrir sin defecto nuevo reproducible. |
@@ -32,17 +32,17 @@ Este documento propone el siguiente trabajo; no autoriza implementarlo automáti
 
 ## 2. Próximas cinco prioridades, en orden
 
-### 1. P1 — Propagar correctamente cambios de propietario (H2 pendiente)
+### 1. P1 — H2: validación backend real pendiente (cliente corregido)
 
-P1-A/H1 está RESUELTO; la siguiente tarea de esta prioridad es H2:
+P1-A/H1 está RESUELTO. P1-B/H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL en ad2eb22. La implementación cliente ya no es una tarea pendiente; falta validarla contra backend real aislado:
 
 - **H1 — RESUELTO en 801c006.** Se sustituyó la identidad ts/score incompatible por los siete campos persistidos, con fallback ts/score y orden por date. Límite de 60 conservado, sin migración ni cambio de esquema. Validación: dos pestañas reales con recarga, 29 suites versionadas, 486 checks, cero fallos.
 - Regresión H1 completada: intentos reales, distintas fechas/porcentajes/tests, deduplicación de copias, orden, retención, datos parciales y aislamiento. Límites vigentes: dos intentos idénticos en todos los campos y el mismo milisegundo son indistinguibles; localStorage no es transaccional entre procesos.
-- **H2: auth A→B sin estado null intermedio.** handleSession no emite authchange para B si ya había A; tampoco reinicia profileEnsured. Probar el módulo auth real conectado a consumidores, no solo inyectar eventos manualmente en cloud-progress.
-- Regresión requerida: A→B directo, A→logout→B, INITIAL_SESSION/getSession, eventos repetidos y respuestas tardías; cada propietario tiene slot correcto, sin escritura/perfil de A con sesión B, sin bloquear visitante ni recuperación.
+- **H2 — CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL.** Causa anterior: handleSession solo comprobaba sesión previa, sin comparar UID, y no reiniciaba profileEnsured al cambiar directamente de propietario. Solución: comparación por UID, reinicio del provisioning al cambiar propietario y anuncio de B antes de esperar red. Provisioning/perfil tardíos de A quedan protegidos por los guards existentes; repetir eventos del mismo UID no duplica transición.
+- Regresión cliente completada con la nueva tests/auth-owner.test.js: 30 suites, 493 checks, cero fallos y 61 JS con sintaxis correcta; multi-pestaña simulada y operaciones async tardías verificadas. NO se validó Supabase real ni RLS real: el backend local no estaba disponible.
 - Sin cambios de identidad SRS ni esquema por defecto. No afirmar fuga de producción: el fallo de anuncio está reproducido en VM; su impacto de backend real requiere un entorno autorizado.
 
-Criterio de cierre pendiente para H2: reproducir el fallo de anuncio con auth real y validar su corrección con consumidores, suites owner/estudio/cloud/auth y sin mezcla de propietarios. H1 no debe reabrirse como pendiente.
+Criterio de cierre pendiente para H2: validar contra Supabase/RLS reales en un backend aislado autorizado, con cuentas efímeras, dos pestañas, cambios directos, perfil/progreso/colas correctos y respuestas tardías sin mezcla. No presentar mocks como evidencia real ni reabrir H1. Los demás P1 siguen pendientes.
 
 ### 2. P1 — Verificar y completar el roundtrip cloud realmente disponible
 
@@ -70,8 +70,8 @@ Criterio de cierre: examen y adaptación cumplen lo que dice su UI; no se cambia
 
 - No existe CI versionada. Separar comprobaciones no mutantes (sintaxis, suites Node, integridad, SEO --check y navegador local) de harnesses con BD/fixtures/migraciones.
 - tests/run-all.sh ejecuta todos los shell, incluido pg-srs-delete que aplica 00008. No ejecutarlo a ciegas como comando de auditoría de solo lectura.
-- El conjunto versionado actual pasa: 29 suites / 486 checks y 60 JS con sintaxis válida. No ocultar los seis fallos de tres scratch históricos: actualizar expectativas o archivarlos explícitamente en una tarea autorizada. El antiguo conteo de defer incluye palabras de comentarios; el HTML tiene 22 etiquetas defer.
-- Priorizar fixtures que modelen datos/eventos reales y las lagunas pendientes H2–H5, sin reescribir todos los arneses ni añadir dependencia por unas líneas.
+- El conjunto versionado actual pasa: 30 suites / 493 checks y 61 JS con sintaxis válida. No ocultar los seis fallos de tres scratch históricos: actualizar expectativas o archivarlos explícitamente en una tarea autorizada. El antiguo conteo de defer incluye palabras de comentarios; el HTML tiene 22 etiquetas defer.
+- Priorizar fixtures que modelen datos/eventos reales y la validación backend real pendiente de H2 y las lagunas H3–H5, sin reescribir todos los arneses ni añadir dependencia por unas líneas.
 - Mantener ejecución de navegador en ambas bases, con/sin SW, móvil y offline; PostgreSQL real solo en job/entorno dedicado autorizado.
 
 Criterio de cierre: comando/CI repetible que no migra ni toca datos por sorpresa; omitidas y requisitos externos diferenciados de aprobadas.
@@ -105,11 +105,11 @@ Criterio de cierre: matriz auth actualizada con UI, tests, ejecución backend re
 
 ## 4. Evidencia que condiciona el siguiente encargo
 
-- Pruebas versionadas: **29/29 suites, 486 checks, cero fallos**, validados en P1-A/801c006. No se reejecutaron durante esta revisión documental. Evidencia histórica de la auditoría base: sintaxis **60/60 JS** y SEO --check con cuatro HTML correctos.
+- Pruebas de P1-B/ad2eb22: **30 suites, 493 checks, cero fallos; 61 JS con sintaxis correcta**, incluida la nueva tests/auth-owner.test.js. Multi-pestaña simulada y operaciones async tardías verificadas. Supabase real/RLS real NO validados por backend local no disponible. No se reejecutaron durante esta revisión documental. Evidencia histórica de la auditoría base: sintaxis **60/60 JS** y SEO --check con cuatro HTML correctos.
 - Diagnósticos ignorados ejecutados: **nueve arneses, seis pasan/tres fallan; 144 checks OK/seis fallos por expectativas históricas**. No sumarlos a una afirmación de “todo verde”. Total ampliado histórico de aquella auditoría: 38 arneses, 619 checks aprobados/seis fallidos; no es una ejecución conjunta nueva con P1-A.
 - Navegador routing: **PASS**, raíz y mirror con/sin SW; 132 entradas, 132 recargas, 64 internas, 128 historial, 66 offline. Smoke adicional en 17 vistas y estudio móvil/offline.
 - Cuatro harnesses PostgreSQL/PostgREST **omitidos** por requerir escrituras/fixtures o migración. Backend real actual, correo, producción y Search Console **no verificados**.
-- H1 está RESUELTO en 801c006 y validado con dos pestañas reales. Los defectos H2–H4 permanecen; H5 es una integración incompleta demostrada por productores/consumidores/SQL versionado; H6 limita la restauración. No se corrigieron en esta fase documental.
+- H1 está RESUELTO en 801c006 y validado con dos pestañas reales. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL. Los defectos H3–H4 permanecen; H5 es una integración incompleta demostrada por productores/consumidores/SQL versionado; H6 limita la restauración. No se corrigieron en esta fase documental.
 - CONTEXT contiene inventario de módulos/datos/storage y tabla de comparaciones históricas. README y DESPLIEGUE no se editaron: se recomienda actualizar inventario de funcionalidades, orden de carga, cifra de config tests y advertencia de runner mutante en otro encargo.
 
 ## 5. Historia preservada y forma de continuar

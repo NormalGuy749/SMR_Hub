@@ -1,8 +1,8 @@
 # SMR Hub — contexto para continuar el proyecto
 
-## ESTADO CANÓNICO ACTUAL — actualizado 2026-11-01 — commit 801c006cfd83cf85d8ed88e3507536398c5418a5
+## ESTADO CANÓNICO ACTUAL — actualizado 2026-11-01 — commit ad2eb227b5b4645ccf67f9e29a392eb1c7aeb33a
 
-Auditoría maestra de base: 2026-10-31, commit b0ad8b2. Actualización documental limitada al cierre P1-A/H1; no constituye una nueva auditoría completa.
+Auditoría maestra de base: 2026-10-31, commit b0ad8b2. Actualización documental de P1-A/H1 y P1-B/H2; no constituye una nueva auditoría completa. H2 está corregido en cliente, con validación de Supabase/RLS real pendiente.
 
 Esta sección y las siguientes describen la copia local auditada. Sustituyen las antiguas listas de “fase actual 8.5” y de pendientes acumulados. Código > tests actuales > ejecución > configuración > esquema > Git > documentos. Una funcionalidad presente en el cliente no demuestra que su backend esté desplegado.
 
@@ -10,19 +10,19 @@ Esta sección y las siguientes describen la copia local auditada. Sustituyen las
 
 | Punto | Estado actual |
 | --- | --- |
-| A. Commit | `801c006cfd83cf85d8ed88e3507536398c5418a5`, `main`, mensaje `fix(progress): preservar historial entre pestañas`. `origin/main` local coincide; no se hizo fetch ni se certificó el remoto vivo. |
+| A. Commit | `ad2eb227b5b4645ccf67f9e29a392eb1c7aeb33a`, `main`, mensaje `fix(auth): propagar cambios directos de propietario`. `origin/main` local coincide; no se hizo fetch ni se certificó el remoto vivo. |
 | B. Arquitectura | SPA estática de scripts clásicos, globals compartidos, 17 rutas, datos educativos locales, progreso local-first y adaptadores Supabase. |
 | C. Completo en el alcance del cliente | Modo Estudio v1, recursos publicados, glosario, casos, navegación/routing, exportación imprimible y SEO P1 técnico. Tests evaluados disponibles con defectos concretos abajo. |
 | D. Parcial | Ciclo de cuenta, restauración cloud de algunos dominios, currículo, tabla de puertos y algunas métricas. No declarar todo “cloud completo”. |
 | E. Ausente | Eliminación de cuenta, cambio de contraseña desde perfil, exportación/importación JSON en UI, reanudación/cola persistida de estudio, CI versionada, monetización y analítica de uso integrada. |
-| F. Defectos reproducibles | H1 RESUELTO en 801c006. Siguen pendientes H2 (cambio directo de UID sin anuncio de la nueva cuenta), la corrección anticipada del examen y la racha del adaptativo. |
+| F. Defectos reproducibles | H1 RESUELTO en 801c006. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL (ad2eb22). H3–H6 y los demás pendientes conservan su estado. |
 | G. Límites aceptados del diseño | localStorage sin transacción entre procesos/claves; límites de ventanas; lock sin timeout; conflictos SRS por nivel máximo y borrados tardíos. |
 | H. Cloud | Nueve migraciones y 17 tablas versionadas, RPC/RLS inspeccionadas. Aplicación actual en BD local o producción: no certificada. Staging antiguo: solo evidencia histórica. |
 | I. PWA | SW v5, caché por montaje, 32 entradas de precache; arranque y estudio offline después de calentamiento. Configuración pública excluida de caché. |
 | J. SEO | Cuatro HTML generados, seis URLs de sitemap; metadata SPA por ruta. Sin evidencia actual de Search Console/indexación o rendimiento público. P2 SEO no iniciado aquí. |
 | K. Contenido | 154 preguntas, siete tests/categorías, 19 recursos, 51 términos, 55 temas, seis casos, cuatro rutas, 19 currículos y 227 instancias de módulos. 51 incidencias de contenido registradas; cero puertos. |
-| L. Validación | P1-A: 29 suites versionadas/486 checks, cero fallos y verificación real con dos pestañas. Evidencia histórica de sintaxis, SEO y diagnósticos separada en §9. |
-| M. Prioridades | P0 no observado dentro del alcance; P1 propiedad (H2) y restauración cloud de errores; P2 motor de tests/contenido/semántica; P3 documentación auxiliar/API sin uso. |
+| L. Validación | P1-B: 30 suites, 493 checks, cero fallos; 61 JS con sintaxis correcta. Multi-pestaña simulada y operaciones async tardías verificadas. Supabase/RLS real NO validados; evidencia histórica separada en §9. |
+| M. Prioridades | P0 no observado dentro del alcance; P1 validación backend real de H2 y restauración cloud de errores; P2 motor de tests/contenido/semántica; P3 documentación auxiliar/API sin uso. |
 | N. Deuda | Fixtures de historial corregidos en P1-A; permanecen arneses históricos obsoletos, extracción literal de funciones en tests, SDK CDN sin versión exacta, ausencia de CI. |
 | O. Orden recomendado | Corregir P1 → verificar/completar roundtrip cloud → corregir examen/adaptativo → automatizar regresión segura → decidir cuenta y contenido. Detalle en ROADMAP. |
 
@@ -171,15 +171,15 @@ Distintas métricas de “maestría”: `progress.masteryFor` combina recursos, 
 | Logout | COMPLETA cliente | signOut scope local; conserva otras sesiones de dispositivos. Evento SDK decide limpieza; error libera botón y se registra en consola, sin aviso visible dedicado. |
 | Restauración | COMPLETA cliente | getSession + suscripción antes de restaurar; INITIAL_SESSION; slots por propietario. No probado con JWT real hoy. |
 | Perfil académico | COMPLETA cliente | UI, normalización y sync con awaitSlot/token; profile-owner. No edita email/display_name del usuario. |
-| Cambio de cuenta | PARCIAL / DEFECTUOSA en A→B directo | Secuencia logout→login soportada y probada con mocks de slots; handleSession no anuncia B si A seguía en state.user. Defecto H2. |
-| Protección cross-UID | PARCIAL extremo a extremo | Guards de datos/token/generación, dueño persistido, lock y RLS presentes; no asumir cobertura del evento auth que falta en H2. |
+| Cambio de cuenta | CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL | handleSession compara UID, reinicia profileEnsured y anuncia B antes de esperar red. tests/auth-owner.test.js verifica consumidores reales con SDK/DOM/almacenamiento simulados; backend local no disponible. |
+| Protección cross-UID | PARCIAL extremo a extremo | Guards de datos/token/generación, dueño persistido, lock y RLS presentes; evento H2 corregido en cliente; no asumir validación de Supabase/RLS real. |
 | Recuperación de contraseña | COMPLETA cliente | resetPasswordForEmail, PKCE, PASSWORD_RECOVERY, enlace fallido/caducado, updateUser y tests. Correo/redirect allowlist real sin comprobar. |
 | Cambio de contraseña | PARCIAL | Existe updateUser desde recuperación y exige state.recovery; no hay acción permanente en perfil para cambiarla autenticado. |
 | Eliminación de cuenta | NO EXISTE | Sin UI, endpoint o RPC de borrado de auth.users. ON DELETE CASCADE en tablas no proporciona esa función. Borrar progreso local no borra cuenta. |
 | Confirmación email | PARCIAL | Mensaje al registrarse, error email not confirmed y procesamiento SDK del retorno; sin UI de reenvío/cambio de email ni prueba real de correo. |
 | Expiración | PARCIAL | autoRefreshToken del SDK y pausa de cola ante 401/JWT hasta re-login; sin certificación de expiración real/reanudación en proveedor. |
 | Offline | PARCIAL cuenta; estudio local disponible | Sesión persistida gestionada por SDK; red fallida no impide estudio. No se garantiza renovar JWT sin red ni autenticar por primera vez offline. |
-| Multi-pestaña | PARCIAL | storage, sesión SDK compartida, slots y guards con suites; historial H1 RESUELTO y validado con entradas reales. H2 sigue pendiente. Dos cuentas simultáneas del mismo origen no son un caso soportado. |
+| Multi-pestaña | PARCIAL | storage, sesión SDK compartida, slots y guards con suites; historial H1 RESUELTO y validado con entradas reales. H2 corregido en cliente, pendiente validación backend real. Dos cuentas simultáneas del mismo origen no son un caso soportado. |
 
 `SMR.auth` emite `smr:authchange`; cloud-progress instala slot y publica `SMR.cloudSession`. Perfil espera ese contrato. Las suites de owner inyectan eventos de cambio y no prueban por sí solas que auth.js los produzca todos.
 
@@ -305,12 +305,12 @@ Cloudflare es canonical también en el mirror. P1 técnico está integrado; las 
 
 ## 8. Estado de defectos, riesgos y límites
 
-Ningún P0 observado en la auditoría base. H1 está RESUELTO; H2–H6 siguen pendientes.
+Ningún P0 observado en la auditoría base. H1 está RESUELTO. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL. H3–H6 y los demás P1 permanecen pendientes.
 
 | ID / prioridad | Evidencia actual y reproducción | Consecuencia / siguiente prueba |
 | --- | --- | --- |
 | H1 / P1 — RESUELTO | Causa anterior: tests.history deduplicaba con ts/score aunque recordTest persiste date/pct. Corregido en 801c006: identidad tolerante por los siete campos testId, mode, date, pct, correct, total y title, con fallback ts/score; orden por date y límite de 60 entradas conservado. | Validado antes/después con prueba de regresión y dos pestañas reales, incluida recarga de ambas. 29 suites versionadas, 486 checks, cero fallos. Sin migración ni cambio de esquema. |
-| H2 / P1 | auth.js handleSession recuerda solo wasSignedIn booleano. Con función real en VM: sesión A → sesión B emite [A], aunque state.user=B. No emite authchange B ni reinicia profileEnsured. | Consumidores cloud/slots pueden seguir con propietario A mientras SDK/user son B. Logout→login es el flujo UI normal; no se probó fuga real ni backend con cambio directo. Añadir test auth→consumidores, no solo eventos sintéticos de owner. |
+| H2 / P1 — CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL | Causa anterior: handleSession comprobaba solo si existía sesión previa, sin comparar UID, y profileEnsured no se reiniciaba al cambiar directamente de propietario. En ad2eb22 se compara UID, reinicia el provisioning por propietario y anuncia B antes de esperar red. Los guards existentes protegen frente a provisioning/perfil tardíos de A; eventos repetidos del mismo UID no duplican transición. | Nueva tests/auth-owner.test.js: consumidores reales con SDK/DOM/almacenamiento simulados; multi-pestaña y operaciones async tardías verificadas. 30 suites, 493 checks, cero fallos; 61 JS con sintaxis correcta. NO se validó Supabase real ni RLS real porque el backend local no estaba disponible. |
 | H3 / P2 | tests.js renderQuestion añade .correct/.wrong y quiz-explain ok/bad aunque cfg.explain=false. En examen real se vio una opción .correct antes del resultado con texto “detalle al finalizar”. | Revela corrección anticipada y contradice “sin pistas”. Probar modo examen correcto/incorrecto sin colores reveladores hasta finalizar. |
 | H4 / P2 | renderAdaptiveQuestion pone adaptive.streak=0 en cada pregunta. next solo suma/resta una vez. Con función real y cuatro aciertos: niveles [0,0,0,0], racha final 1. | Regla “dos aciertos suben/dos fallos bajan” no se alcanza por racha. El agotamiento de buckets aún puede mostrar otras dificultades, no es adaptación según aciertos. |
 | H5 / P1 integración cloud | Código envía wrong_answer_events pero nunca los lee/reproduce; pull solo consume wrong_answers con MAX. Ninguna migración versionada mantiene esa caché al insertar eventos. Verificado por búsqueda de todos los productores/consumidores y SQL. | Un dispositivo nuevo no puede reconstruir errores a partir del contrato versionado; clears remotos no eliminan contador local por ese pull. No se presenta como incidente confirmado en producción, donde podrían existir componentes no versionados. Exige roundtrip con BD local autorizada. |
@@ -331,6 +331,12 @@ Límites/decisiones adicionales, separados de defectos reproducidos:
 - No CI ni pruebas físicas de accesibilidad/rendimiento/memoria. La evaluación estática de RLS no equivale a auditoría completa de seguridad.
 
 ## 9. Evidencia de validación
+
+### P1-B/H2 — commit ad2eb22 — CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL
+
+Nueva tests/auth-owner.test.js con siete casos de integración: auth, progreso y perfil reales sobre SDK/DOM/almacenamiento simulados; cambios A→B/B→A, visitante, logout, restauración, eventos repetidos/refresh, slots, widget, SRS, colas, transición pendiente y operaciones async tardías. La regresión completa pasó: 30 suites, 493 checks, cero fallos; 61 JS con sintaxis correcta.
+
+El provisioning tardío de A no vuelve a anunciar ni reinstalar A; el perfil tardío de A no contamina B. Los eventos repetidos del mismo UID no duplican transición. La multi-pestaña fue simulada: NO es evidencia de autenticación Supabase ni RLS real. El backend local 127.0.0.1:54321 rechazó la conexión, por lo que esa validación sigue pendiente. Esta revisión documental no reejecutó pruebas ni modificó código.
 
 ### P1-A/H1 — commit 801c006 — RESUELTO
 
@@ -411,7 +417,7 @@ Smoke adicional con Chromium aislado: 17 vistas a 1366×900 sin overflow ni erro
 
 Móvil 390×844: entrada por Más secciones, estudio por tema, foco al revelar y ancho 390/390. Offline warm: recarga de /estudio, tema, rating/finalización, navegación a tests/recursos/herramientas/dashboard; sesión pasó a seis, perfil persistió, IndexedDB tenía indicador progress. Fuentes/config fallaron como se detalla en §7. No hubo excepción JS de la aplicación. Se descartó un error de instrumentación del auditor al intentar escribir en una variable de medición desaparecida tras recarga; no era código de SMR.
 
-En la auditoría base se confirmó H1 con dos pestañas y recordTest reales; posteriormente quedó RESUELTO en P1-A/801c006. H2/H4 con funciones reales extraídas en VM. No se cambiaron archivos para obtener estas evidencias. Sin cuentas reales ni pruebas destructivas de producción. El PDF se verificó con suite/DOM y formulario; no se certificó un PDF descargado ni impresión física.
+En la auditoría base se confirmó H1 con dos pestañas y recordTest reales; posteriormente quedó RESUELTO en P1-A/801c006. H2/H4 se reprodujeron entonces con funciones reales extraídas en VM; H2 pasó después a CORREGIDO EN CLIENTE, pendiente validación backend real, en P1-B/ad2eb22. No se cambiaron archivos para obtener estas evidencias. Sin cuentas reales ni pruebas destructivas de producción. El PDF se verificó con suite/DOM y formulario; no se certificó un PDF descargado ni impresión física.
 
 ## 10. Documentación comparada y decisiones históricas
 
@@ -443,9 +449,9 @@ Leídos completos CONTEXT/ROADMAP anteriores, README, DESPLIEGUE, AGENTS, AUDITO
 
 - 6D.1–6D.9: separación contenido/currículo, IDs derivados, taxonomía y asociaciones; no inventar equivalencias. Los arneses de contratos más antiguos no reflejan todos los cambios de 6D.8.
 - 8.4: progreso cloud por dominios/colas y aislamiento. 8.5: SRS cloud, RPC de merge, UI de rating y borrado. 8.5.7 resolvió decisión B con deleted_at; sentinel level=-1 era incompatible con CHECK 0–5.
-- 8.5.8 D-1: restaurar snapshot al entrar sobre slot vacío. 8.5.10 D-2: callback de avance SRS corregido. 8.5.11 D-3: dueño vivo persistido evita reinstalar snapshot obsoleto. 8.5.12 D-4: propiedad entre pestañas. 8.5.13 D-5: fusión por dominio. 8.5.14 D-6: marcas SRS tras await con lectura fresca/estado esperado. Mecanismos presentes; H1 RESUELTO en 801c006; H2 y los límites no transaccionales impiden una afirmación global de “todo aislamiento/merge resuelto”.
+- 8.5.8 D-1: restaurar snapshot al entrar sobre slot vacío. 8.5.10 D-2: callback de avance SRS corregido. 8.5.11 D-3: dueño vivo persistido evita reinstalar snapshot obsoleto. 8.5.12 D-4: propiedad entre pestañas. 8.5.13 D-5: fusión por dominio. 8.5.14 D-6: marcas SRS tras await con lectura fresca/estado esperado. Mecanismos presentes; H1 RESUELTO en 801c006; la validación backend real de H2 y los límites no transaccionales impiden una afirmación global de “todo aislamiento/merge resuelto”.
 - Los informes de 11–16 octubre citan HEAD 1f6f247/e19d503 y BD local scratch_84val. Son evidencia histórica, no estado Git/BD actual. Los informes 23/26 citan b2c27ba/6e0507f y grafos parciales; no son el grafo de b0ad8b2.
-- Hitos Git presentes: 9718185 (SRS/tombstones), d5f7882 (feedback/hardening), 30d9c1b (cuatro regresiones), 3732a97/de7ff59 (routing), c388bad (SEO P1), a511cbf (guiado 8.X.1), a2415ab (libre 8.X.2), f99e72f (fuentes 8.X.3), 9590d59 (integración 8.X.4), b0ad8b2 (temas 8.X.5), 801c006 (P1-A/H1: historial entre pestañas corregido y validado).
+- Hitos Git presentes: 9718185 (SRS/tombstones), d5f7882 (feedback/hardening), 30d9c1b (cuatro regresiones), 3732a97/de7ff59 (routing), c388bad (SEO P1), a511cbf (guiado 8.X.1), a2415ab (libre 8.X.2), f99e72f (fuentes 8.X.3), 9590d59 (integración 8.X.4), b0ad8b2 (temas 8.X.5), 801c006 (P1-A/H1: historial entre pestañas corregido y validado), ad2eb22 (P1-B/H2: corregido en cliente, pendiente validación backend real).
 - last_reviewed_at nunca se añadió: sin consumidor aprobado no es deuda obligatoria. Decisión B de borrado está cerrada; la prioridad entre tombstone tardío y revive sigue abierta.
 
 El roadmap vigente está en SMR_HUB_ROADMAP.md. Antes de la próxima implementación, volver a verificar SHA, diffs, contratos y alcance autorizado. Este documento no autoriza cambios de backend ni corrige los defectos descritos.
