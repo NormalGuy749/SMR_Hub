@@ -646,10 +646,12 @@
      operación obsoleta se ABORTA antes de cualquier escritura cloud que
      pudiera propagar datos de B como progreso de A (o viceversa). */
   function sessionHandleFor() {
-    return { owner: currentOwner(), uid: runtime.currentUser && runtime.currentUser.id, dataRef: SMR.progress.data, at: Date.now() };
+    return { owner: currentOwner(), uid: runtime.currentUser && runtime.currentUser.id, dataRef: SMR.progress.data, token: SMR.cloudSession ? SMR.cloudSession.token() : null, at: Date.now() };
   }
   function sessionChangedFor(handle) {
     if (!handle) return false;
+    if (runtime.transitionPending) return true;
+    if (handle.token && !SMR.cloudSession.isCurrent(handle.token)) return true;
     if (currentOwner() !== handle.owner) return true;
     if ((runtime.currentUser && runtime.currentUser.id) !== handle.uid) return true;
     if (SMR.progress.data !== handle.dataRef) return true; /* swap de cuenta instaló otro estado */
@@ -856,6 +858,7 @@
       if (error) { warn('push resource_state', error); return; }
     }
 
+    if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return;
     if (localChanged) {
       /* escribir el merge en el local SIN disparar de nuevo el push */
       runtime.lastSnapshot = undefined; /* evita el trigger de save */
@@ -913,6 +916,7 @@
       const { error } = await sb.from('case_solutions').upsert(upserts, { onConflict: 'user_id,case_id' });
       if (error) { warn('push case_solutions', error); return; }
     }
+    if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return;
     if (localChanged) {
       runtime.lastSnapshot = undefined;
       originalSave.call(SMR.progress);
@@ -1251,6 +1255,7 @@
         .order('created_at', { ascending: false })
         .limit(200);
       if (error) throw new Error(error.message);
+      if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
       const seen = new Set(data.tests.history.map((h) => `${h.testId}|${h.mode}|${h.date}`));
       const missing = (attempts || []).filter((a) => !seen.has(`${a.test_id}|${a.mode}|${a.created_at}`));
       if (missing.length) {
@@ -1293,12 +1298,14 @@
     }
 
     /* La caché de wrong_answers solo aumenta los contadores locales. */
+    if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
     try {
       const { data: cache, error } = await sb.from('wrong_answers')
         .select('test_id, question_key, count')
         .eq('user_id', uid)
         .limit(500);
       if (error) throw new Error(error.message);
+      if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
       (cache || []).forEach((r) => {
         const bucket = data.tests.wrong[r.test_id] || {};
         const cur = bucket[r.question_key];
@@ -1318,6 +1325,7 @@
         .order('day', { ascending: false })
         .limit(400);
       if (error) throw new Error(error.message);
+      if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
       const sorted = (days || []).map((r) => r.day).sort().reverse();
       if (sorted.length) {
         let count = 1;
@@ -1346,6 +1354,7 @@
         .order('created_at', { ascending: false })
         .limit(50);
       if (error) throw new Error(error.message);
+      if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
       const seen = new Set((data.studySessions || []).map((s) => `${s.ts}|${s.minutes}|${s.steps}`));
       (sessions || []).forEach((s) => {
         if (!seen.has(`${s.created_at}|${s.minutes}|${s.steps}`)) {
@@ -1581,10 +1590,13 @@
     session.pendingOwners.push(announcedOwner);
     return withSlotTransitionLock(() => {
       try { body(announcedOwner); }
-      finally { removePendingOwner(announcedOwner); notifySlot(announcedOwner); }
+      finally {
+        removePendingOwner(announcedOwner);
+        notifySlot(announcedOwner);
+        runtime.transitionPending = false;
+      }
     }).then((ran) => {
       if (ran) {
-        runtime.transitionPending = false;
         runtime.deferredUser = null;
         runtime.deferredBody = null;
         return true;
