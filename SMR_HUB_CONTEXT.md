@@ -1,8 +1,8 @@
 # SMR Hub — contexto para continuar el proyecto
 
-## ESTADO CANÓNICO ACTUAL — actualizado 2026-11-01 — commit ad2eb227b5b4645ccf67f9e29a392eb1c7aeb33a
+## ESTADO CANÓNICO ACTUAL — actualizado 2026-11-01 — commit d754af427b1157c88f67f6c15ff9387b9fa4e732
 
-Auditoría maestra de base: 2026-10-31, commit b0ad8b2. Actualización documental de P1-A/H1 y P1-B/H2; no constituye una nueva auditoría completa. H2 está corregido en cliente, con validación de Supabase/RLS real pendiente.
+Auditoría maestra de base: 2026-10-31, commit b0ad8b2. Actualización documental de P1-A/H1, P1-B/H2 y P1-C.0; no constituye una nueva auditoría completa. H2 está corregido en cliente, con validación de Supabase/RLS real pendiente.
 
 Esta sección y las siguientes describen la copia local auditada. Sustituyen las antiguas listas de “fase actual 8.5” y de pendientes acumulados. Código > tests actuales > ejecución > configuración > esquema > Git > documentos. Una funcionalidad presente en el cliente no demuestra que su backend esté desplegado.
 
@@ -10,18 +10,18 @@ Esta sección y las siguientes describen la copia local auditada. Sustituyen las
 
 | Punto | Estado actual |
 | --- | --- |
-| A. Commit | `ad2eb227b5b4645ccf67f9e29a392eb1c7aeb33a`, `main`, mensaje `fix(auth): propagar cambios directos de propietario`. `origin/main` local coincide; no se hizo fetch ni se certificó el remoto vivo. |
+| A. Commit | `d754af427b1157c88f67f6c15ff9387b9fa4e732`, `main`, mensaje `fix(cloud): aislar respuestas tardías por propietario`. La auditoría base y validaciones anteriores se conservan como historia. |
 | B. Arquitectura | SPA estática de scripts clásicos, globals compartidos, 17 rutas, datos educativos locales, progreso local-first y adaptadores Supabase. |
 | C. Completo en el alcance del cliente | Modo Estudio v1, recursos publicados, glosario, casos, navegación/routing, exportación imprimible y SEO P1 técnico. Tests evaluados disponibles con defectos concretos abajo. |
 | D. Parcial | Ciclo de cuenta, restauración cloud de algunos dominios, currículo, tabla de puertos y algunas métricas. No declarar todo “cloud completo”. |
 | E. Ausente | Eliminación de cuenta, cambio de contraseña desde perfil, exportación/importación JSON en UI, reanudación/cola persistida de estudio, CI versionada, monetización y analítica de uso integrada. |
-| F. Defectos reproducibles | H1 RESUELTO en 801c006. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL (ad2eb22). H3–H6 y los demás pendientes conservan su estado. |
+| F. Defectos reproducibles | H1 RESUELTO en 801c006. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL (ad2eb22). P1-C.0 corregido en cliente, pendiente validación backend real; H3–H6 y los demás pendientes conservan su estado. |
 | G. Límites aceptados del diseño | localStorage sin transacción entre procesos/claves; límites de ventanas; lock sin timeout; conflictos SRS por nivel máximo y borrados tardíos. |
 | H. Cloud | Nueve migraciones y 17 tablas versionadas, RPC/RLS inspeccionadas. Aplicación actual en BD local o producción: no certificada. Staging antiguo: solo evidencia histórica. |
 | I. PWA | SW v5, caché por montaje, 32 entradas de precache; arranque y estudio offline después de calentamiento. Configuración pública excluida de caché. |
 | J. SEO | Cuatro HTML generados, seis URLs de sitemap; metadata SPA por ruta. Sin evidencia actual de Search Console/indexación o rendimiento público. P2 SEO no iniciado aquí. |
 | K. Contenido | 154 preguntas, siete tests/categorías, 19 recursos, 51 términos, 55 temas, seis casos, cuatro rutas, 19 currículos y 227 instancias de módulos. 51 incidencias de contenido registradas; cero puertos. |
-| L. Validación | P1-B: 30 suites, 493 checks, cero fallos; 61 JS con sintaxis correcta. Multi-pestaña simulada y operaciones async tardías verificadas. Supabase/RLS real NO validados; evidencia histórica separada en §9. |
+| L. Validación | P1-C.0: 31 suites, 518 checks, 0 fallos; 62 JS correctos; multi-pestaña simulada. Supabase/RLS real pendiente. Evidencia de fases anteriores separada en §9. |
 | M. Prioridades | P0 no observado dentro del alcance; P1 validación backend real de H2 y restauración cloud de errores; P2 motor de tests/contenido/semántica; P3 documentación auxiliar/API sin uso. |
 | N. Deuda | Fixtures de historial corregidos en P1-A; permanecen arneses históricos obsoletos, extracción literal de funciones en tests, SDK CDN sin versión exacta, ausencia de CI. |
 | O. Orden recomendado | Corregir P1 → verificar/completar roundtrip cloud → corregir examen/adaptativo → automatizar regresión segura → decidir cuenta y contenido. Detalle en ROADMAP. |
@@ -331,6 +331,22 @@ Límites/decisiones adicionales, separados de defectos reproducidos:
 - No CI ni pruebas físicas de accesibilidad/rendimiento/memoria. La evaluación estática de RLS no equivale a auditoría completa de seguridad.
 
 ## 9. Evidencia de validación
+
+### P1-C.0 — Ventanas async de propietario en cloud-progress
+
+**CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL** — commit d754af427b1157c88f67f6c15ff9387b9fa4e732 (d754af4).
+
+Causa: algunas rutas hacían await y después mutaban SMR.progress.data sin volver a comprobar propietario/sesión. El handle no incorporaba suficientemente token/generación ni transición pendiente; una respuesta de A podía modificar recursos o racha después de cambiar a B.
+
+Solución: reutilización de sessionHandleFor/sessionChangedFor, token/generación de cloudSession, referencia de progreso, UID/propietario y transición pendiente. Se añadieron guards posteriores a await antes de mutar memoria o guardar. Se corrigió el orden de limpieza del estado pendiente al recuperar Web Locks, para permitir reanudar la sincronización después de instalar el slot bajo exclusión.
+
+Alcance: recursos, casos equivalentes, pull inicial relevante, historial/errores/días/sesiones antes de mutar memoria y racha. Sin cambios de esquema, SQL ni migraciones. Los guards no completan la reconstrucción funcional de esos dominios.
+
+Validación de la fase: **31 suites, 518 checks, 0 fallos; 62 JS con sintaxis correcta**. tests/cloud-roundtrip-audit.test.js está versionado. Se verificaron A→B, logout, A→B→A, generación, transición pendiente y multi-pestaña simulada. Esta revisión documental no reejecuta las pruebas.
+
+Limitaciones: **NO se validó Supabase/RLS real**, porque el backend local no estaba disponible. localStorage sigue sin ser transaccional entre procesos. best/last, wrong, activity y studyMinutes/studySessions siguen pendientes en su roundtrip; no se marca la sincronización cloud completa como resuelta.
+
+
 
 ### P1-B/H2 — commit ad2eb22 — CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL
 

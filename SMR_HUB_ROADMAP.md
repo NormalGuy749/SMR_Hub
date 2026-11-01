@@ -2,7 +2,7 @@
 
 ## Roadmap vigente — actualizado 2026-11-01
 
-Base actual: `ad2eb227b5b4645ccf67f9e29a392eb1c7aeb33a` — `fix(auth): propagar cambios directos de propietario`, rama main. Auditoría maestra de base: 2026-10-31 (b0ad8b2); esta revisión recoge P1-A/H1 y clasifica H2 como CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL. La referencia principal es SMR_HUB_CONTEXT.md, “ESTADO CANÓNICO ACTUAL”. No se certificó el estado desplegado ni se consultó producción.
+Base actual: `d754af427b1157c88f67f6c15ff9387b9fa4e732` — `fix(cloud): aislar respuestas tardías por propietario`, rama main. Auditoría maestra de base: 2026-10-31 (b0ad8b2); esta revisión recoge P1-A/H1 y clasifica H2 como CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL. La referencia principal es SMR_HUB_CONTEXT.md, “ESTADO CANÓNICO ACTUAL”. No se certificó el estado desplegado ni se consultó producción.
 
 Este documento propone el siguiente trabajo; no autoriza implementarlo automáticamente. Esta fase solo actualizó CONTEXT y ROADMAP. No hubo cambios funcionales, commit, push, deploy o migraciones. Antes de cada tarea: comprobar Git, preservar todos los cambios y ajustar alcance a código/tests actuales.
 
@@ -30,6 +30,20 @@ Este documento propone el siguiente trabajo; no autoriza implementarlo automáti
 
 “Integrado” se refiere al repositorio auditado. No usar una fecha de informe antiguo como prueba de SQL, variables de entorno o assets que hoy sirve producción.
 
+### P1-C.0 — Ventanas async de propietario en cloud-progress
+
+**CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL** — commit d754af427b1157c88f67f6c15ff9387b9fa4e732 (d754af4).
+
+Causa: algunas rutas hacían await y después mutaban SMR.progress.data sin volver a comprobar propietario/sesión. El handle no incorporaba suficientemente token/generación ni transición pendiente; una respuesta de A podía modificar recursos o racha después de cambiar a B.
+
+Solución: reutilización de sessionHandleFor/sessionChangedFor, token/generación de cloudSession, referencia de progreso, UID/propietario y transición pendiente. Se añadieron guards posteriores a await antes de mutar memoria o guardar. Se corrigió el orden de limpieza del estado pendiente al recuperar Web Locks, para permitir reanudar la sincronización después de instalar el slot bajo exclusión.
+
+Alcance: recursos, casos equivalentes, pull inicial relevante, historial/errores/días/sesiones antes de mutar memoria y racha. Sin cambios de esquema, SQL ni migraciones. Los guards no completan la reconstrucción funcional de esos dominios.
+
+Validación de la fase: **31 suites, 518 checks, 0 fallos; 62 JS con sintaxis correcta**. tests/cloud-roundtrip-audit.test.js está versionado. Se verificaron A→B, logout, A→B→A, generación, transición pendiente y multi-pestaña simulada. Esta revisión documental no reejecuta las pruebas.
+
+Limitaciones: **NO se validó Supabase/RLS real**, porque el backend local no estaba disponible. localStorage sigue sin ser transaccional entre procesos. best/last, wrong, activity y studyMinutes/studySessions siguen pendientes en su roundtrip; no se marca la sincronización cloud completa como resuelta.
+
 ## 2. Próximas cinco prioridades, en orden
 
 ### 1. P1 — H2: validación backend real pendiente (cliente corregido)
@@ -46,7 +60,7 @@ Criterio de cierre pendiente para H2: validar contra Supabase/RLS reales en un b
 
 ### 2. P1 — Verificar y completar el roundtrip cloud realmente disponible
 
-Primero una fase de evidencia en stack local explícitamente autorizado, con cuentas efímeras; no conectar producción por leer este roadmap.
+P1-C.0 está corregido en cliente, pendiente validación backend real; no volver a tratar sus guards como una implementación pendiente. Continúan best/last, wrong, activity y studyMinutes/studySessions. Verificar backend en stack local explícitamente autorizado, con cuentas efímeras; no conectar producción por leer este roadmap.
 
 - **H5:** los eventos add/clear se suben a wrong_answer_events, pero el cliente no hace replay y ninguna migración versionada mantiene wrong_answers. El pull actual solo aumenta contadores de esa caché. Verificar fallo de reconstrucción en un dispositivo limpio y de limpieza entre dispositivos; decidir el mínimo cierre coherente con el modelo existente.
 - **H6:** actividad se sube sin pull y minutos de estudio no se restauran de toda la vida; definir qué continuidad se promete. No inventar métricas históricas ni deducir más de las ventanas disponibles.
@@ -70,7 +84,7 @@ Criterio de cierre: examen y adaptación cumplen lo que dice su UI; no se cambia
 
 - No existe CI versionada. Separar comprobaciones no mutantes (sintaxis, suites Node, integridad, SEO --check y navegador local) de harnesses con BD/fixtures/migraciones.
 - tests/run-all.sh ejecuta todos los shell, incluido pg-srs-delete que aplica 00008. No ejecutarlo a ciegas como comando de auditoría de solo lectura.
-- El conjunto versionado actual pasa: 30 suites / 493 checks y 61 JS con sintaxis válida. No ocultar los seis fallos de tres scratch históricos: actualizar expectativas o archivarlos explícitamente en una tarea autorizada. El antiguo conteo de defer incluye palabras de comentarios; el HTML tiene 22 etiquetas defer.
+- El conjunto versionado actual pasa: 31 suites / 518 checks y 62 JS con sintaxis válida. No ocultar los seis fallos de tres scratch históricos: actualizar expectativas o archivarlos explícitamente en una tarea autorizada. El antiguo conteo de defer incluye palabras de comentarios; el HTML tiene 22 etiquetas defer.
 - Priorizar fixtures que modelen datos/eventos reales y la validación backend real pendiente de H2 y las lagunas H3–H5, sin reescribir todos los arneses ni añadir dependencia por unas líneas.
 - Mantener ejecución de navegador en ambas bases, con/sin SW, móvil y offline; PostgreSQL real solo en job/entorno dedicado autorizado.
 
