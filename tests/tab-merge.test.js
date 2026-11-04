@@ -705,6 +705,7 @@ function seedAccount(bus, uid, progressObj) {
     t1.progress.recordStudySession(2, 4);
     t1.auth(user(UID_A)); await flush();
     assert(t1.progress.data.studyMinutes === 12 && t1.progress.data.studySessions.length === 2, 'visitante/B contaminó A');
+    assert((t1.store.get('progressSyncQueue:guest', {}).sessions || []).some(s => s.minutes === 2), 'la cola visitante fue atribuida a A');
   })();
   record('sesiones y minutos aislados entre A, B y visitante');
 
@@ -718,6 +719,21 @@ function seedAccount(bus, uid, progressObj) {
     assert((queue.sessions || []).some((s) => s.minutes === 7 && s.steps === 2), 'el hook cloud encoló la sesión ajena, no la recién terminada');
   })();
   record('el hook cloud encola la sesión propia aunque otra tenga una fecha posterior');
+
+  await (async () => {
+    const { t1 } = twoTabs();
+    t1.auth(null); await flush();
+    t1.progress.recordStudySession(5, 1);
+    const guest = t1.store.get('progressSyncQueue:guest', {});
+    guest.failed = { sessions: [{ created_at: 1, minutes: 2, steps: 1 }] };
+    t1.store.set('progressSyncQueue:guest', guest);
+    t1.auth(user(UID_A)); await flush();
+    assert(t1.progress.data.studyMinutes === 5, 'la primera cuenta perdió el progreso visitante elegible');
+    const remaining = t1.store.get('progressSyncQueue:guest', {});
+    assert((remaining.sessions || []).length === 0, 'no se adoptó la cola de la primera cuenta elegible');
+    assert(remaining.failed.sessions.length === 1, 'se perdió dead-letter visitante');
+  })();
+  record('primera cuenta elegible adopta progreso y cola visitante, conserva failed');
 
   if (process.env.TAB_MERGE_SELFTEST === '1') {
     await (async () => { assert(1 === 2, 'auto-verificación: aserción forzada a fallar'); })();

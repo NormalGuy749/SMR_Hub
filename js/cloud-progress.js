@@ -329,7 +329,7 @@
     attempts: (e) => `${e.test_id}|${e.mode}|${e.created_at}`,
     sessions: (e) => `${e.created_at}|${e.minutes}|${e.steps}`,
     activity: (e) => `${e.label}|${e.meta}|${e.created_at}`,
-    wrongEvents: (e) => `${e.test_id}|${e.question_key}|${e.event_type}|${e.created_at || e.client_created_at}`,
+    wrongEvents: (e) => JSON.stringify([e.test_id, e.question_key, e.event_type, e.client_created_at ?? e.created_at]),
     streakDays: (e) => e.day
   };
 
@@ -658,6 +658,28 @@
     return false;
   }
 
+  function mergeTestScores(data, rows, attempts) {
+    const before = JSON.stringify([data.tests.best, data.tests.last]);
+    const valid = n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 100;
+    const latest = {};
+    rows.forEach(r => {
+      if (valid(r.best_pct)) data.tests.best[r.test_id] = Math.max(data.tests.best[r.test_id] ?? 0, r.best_pct);
+      if (valid(r.last_pct)) data.tests.last[r.test_id] = r.last_pct;
+    });
+    /* last usa el intento fechado más reciente conocido; sin él, el agregado
+       remoto es respaldo. client_updated_at fecha escrituras, no intentos. */
+    const history = data.tests.history.concat(attempts.map(a => ({ testId: a.test_id, mode: a.mode, pct: a.pct, date: a.created_at })));
+    history.forEach(h => {
+      if (!valid(h.pct)) return;
+      if (['practica', 'completo', 'examen'].includes(h.mode)) {
+        data.tests.best[h.testId] = Math.max(data.tests.best[h.testId] ?? 0, h.pct);
+      }
+      if (Number.isFinite(h.date) && (!latest[h.testId] || h.date >= latest[h.testId].date)) latest[h.testId] = h;
+    });
+    Object.values(latest).forEach(h => { data.tests.last[h.testId] = h.pct; });
+    return before !== JSON.stringify([data.tests.best, data.tests.last]);
+  }
+
   function pushState() {
     if (!runtime.currentUser || runtime.transitionPending) return;
     return chainOrNow(async () => {
@@ -667,67 +689,25 @@
       const sessionHandle = sessionHandleFor();
       const now = Date.now();
 
-      /* test_scores combina best con MAX sobre lectura fresca: otro dispositivo
-         no puede rebajar la mejor marca. last usa el intento más reciente;
-         sin historial local se conserva el valor cloud en vez de escribir null. */
-      let cloudBest = {};
-      let cloudLast = {};
+      let cloudRows, attempts;
       try {
-        const { data: cloudRows, error } = await sb.from('test_scores')
-          .select('test_id, best_pct, last_pct')
-          .eq('user_id', uid);
-        if (error) throw new Error(error.message);
-        (cloudRows || []).forEach((r) => {
-          cloudBest[r.test_id] = r.best_pct;
-          cloudLast[r.test_id] = r.last_pct;
-        });
+        const scores = await sb.from('test_scores').select('test_id, best_pct, last_pct').eq('user_id', uid);
+        if (scores.error) throw new Error(scores.error.message);
+        if (sessionChangedFor(sessionHandle)) return;
+        const recent = await sb.from('test_attempts').select('test_id, mode, pct, created_at')
+          .eq('user_id', uid).order('created_at', { ascending: false }).limit(200);
+        if (recent.error) throw new Error(recent.error.message);
+        cloudRows = scores.data || [];
+        attempts = recent.data || [];
       } catch (err) {
         warn('pull test_scores (pre-merge)', err);
         return; /* sin lectura fresca no hay merge seguro: se reintenta */
       }
-      /* la cuenta cambió mientras se LEÍAN los test_scores
-         del cloud de A: abortar ANTES de cualquier upsert. Si no, las
-         filas derivadas del estado vivo (ahora de B) se enviarían con
-         user_id de A. */
       if (sessionChangedFor(sessionHandle)) return;
-
-      const scoresByTest = {};
-      Object.keys(data.tests.best).forEach((testId) => {
-        const lastEntry = [...data.tests.history].reverse().find((h) => h.testId === testId);
-        const localBest = data.tests.best[testId];
-        const best = (typeof cloudBest[testId] === 'number') ? Math.max(localBest, cloudBest[testId]) : localBest;
-        const last = lastEntry ? lastEntry.pct
-          : (typeof data.tests.last[testId] === 'number' ? data.tests.last[testId]
-            : (typeof cloudLast[testId] === 'number' ? cloudLast[testId] : null));
-        scoresByTest[testId] = {
-          user_id: uid, test_id: testId,
-          best_pct: best,
-          last_pct: last,
-          client_updated_at: now
-        };
-      });
-      Object.keys(data.tests.last).forEach((testId) => {
-        if (!scoresByTest[testId] && typeof data.tests.last[testId] === 'number') {
-          scoresByTest[testId] = {
-            user_id: uid, test_id: testId,
-            best_pct: (typeof cloudBest[testId] === 'number') ? cloudBest[testId] : null,
-            last_pct: data.tests.last[testId],
-            client_updated_at: now
-          };
-        }
-      });
-      /* tests solo en cloud: se conservan intactos (no se regresan) */
-      Object.keys(cloudBest).forEach((testId) => {
-        if (!scoresByTest[testId]) {
-          scoresByTest[testId] = {
-            user_id: uid, test_id: testId,
-            best_pct: cloudBest[testId] ?? null,
-            last_pct: cloudLast[testId] ?? null,
-            client_updated_at: now
-          };
-        }
-      });
-      const scoreRows = Object.values(scoresByTest);
+      if (mergeTestScores(data, cloudRows, attempts)) originalSave.call(SMR.progress);
+      const scoreRows = [...new Set([...Object.keys(data.tests.best), ...Object.keys(data.tests.last)])]
+        .map(testId => ({ user_id: uid, test_id: testId, best_pct: data.tests.best[testId] ?? null,
+          last_pct: data.tests.last[testId] ?? null, client_updated_at: now }));
       if (scoreRows.length) {
         const { error } = await sb.from('test_scores').upsert(scoreRows, { onConflict: 'user_id,test_id' });
         if (error) { warn('push test_scores', error); return; }
@@ -1241,10 +1221,72 @@
      PULL inicial: refuerza historial/caché desde el cloud
      ================================================================ */
 
+  /* Keyset por PK evita desplazar páginas si otro dispositivo inserta eventos. */
+  async function readEventRows(table, columns, uid, handle) {
+    const rows = [];
+    let after = null;
+    while (true) {
+      let query = sb.from(table).select('id,' + columns).eq('user_id', uid)
+        .order('id', { ascending: true }).limit(200);
+      if (after !== null) query = query.gt('id', after);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      if (sessionChangedFor(handle)) return null;
+      rows.push(...(data || []));
+      if (!data || data.length < 200) return rows;
+      const next = data[data.length - 1].id;
+      if (next == null || next === after) throw new Error('Página de eventos sin avance');
+      after = next;
+    }
+  }
+
+  function replayWrong(data, events, queue) {
+    const before = JSON.stringify(data.tests.wrong);
+    const seen = new Set(), groups = new Map();
+    events.concat(queue.wrongEvents || [], (queue.failed || {}).wrongEvents || []).forEach(e => {
+      const ts = e.client_created_at ?? e.created_at;
+      if (!e.test_id || !e.question_key || !Number.isFinite(ts) ||
+          !['add', 'clear'].includes(e.event_type) || !Number.isInteger(e.count_delta) ||
+          (e.event_type === 'add' ? e.count_delta < 1 : e.count_delta !== 0)) return;
+      const identity = EVENT_KEYS.wrongEvents(e);
+      if (seen.has(identity)) return;
+      seen.add(identity);
+      const key = JSON.stringify([e.test_id, e.question_key]);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(e);
+    });
+    const wrong = new Map(Object.entries(data.tests.wrong));
+    groups.forEach(list => {
+      list.sort((a,b) => (a.client_created_at ?? a.created_at) - (b.client_created_at ?? b.created_at));
+      let count = 0, cleared = false;
+      for (let i = 0; i < list.length;) {
+        const ts = list[i].client_created_at ?? list[i].created_at;
+        let end = i + 1;
+        while (end < list.length && (list[end].client_created_at ?? list[end].created_at) === ts) end++;
+        const group = list.slice(i, end);
+        if (group.some(e => e.event_type === 'add') && group.some(e => e.event_type === 'clear')) {
+          cleared = false; // El empate conserva MAX legacy hasta un clear inequívoco posterior.
+        } else {
+          group.forEach(e => { if (e.event_type === 'clear') { count = 0; cleared = true; } else count += e.count_delta; });
+        }
+        i = end;
+      }
+      const { test_id: testId, question_key: key } = list[0];
+      const bucket = { ...(wrong.get(testId) || {}) };
+      // Sin clear, MAX conserva contadores legacy cuyo origen no está en eventos.
+      if (!cleared) count = Math.max(count, bucket[key] || 0);
+      if (count) wrong.set(testId, { ...bucket, [key]: count });
+      else { delete bucket[key]; if (Object.keys(bucket).length) wrong.set(testId, bucket); else wrong.delete(testId); }
+    });
+    data.tests.wrong = Object.fromEntries(wrong);
+    return before !== JSON.stringify(data.tests.wrong);
+  }
+
   async function pullInitial(uid, sessionHandle) {
     const dataRefAtStart = SMR.progress.data;
     const data = SMR.progress.data;
     let localChanged = false;
+    let remoteAttempts = [];
 
     /* --- test_attempts: union al history local (dedupe por test|mode|ts) --- */
     try {
@@ -1256,6 +1298,7 @@
         .limit(200);
       if (error) throw new Error(error.message);
       if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
+      remoteAttempts = attempts || [];
       const seen = new Set(data.tests.history.map((h) => `${h.testId}|${h.mode}|${h.date}`));
       const missing = (attempts || []).filter((a) => !seen.has(`${a.test_id}|${a.mode}|${a.created_at}`));
       if (missing.length) {
@@ -1275,47 +1318,25 @@
 
     /* el fetch de attempts estaba en vuelo cuando la cuenta
        cambió: los datos del cloud de A NO se instalan en el estado de B.
-       (Se comprueba ANTES de derivaçar best/last y del upsert de scores.) */
+       (Se comprueba ANTES de derivar best/last.) */
     if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
 
-    if (localChanged) {
-      data.tests.history.forEach((h) => {
-        const affectsBest = h.mode === 'practica' || h.mode === 'completo' || h.mode === 'examen';
-        if (affectsBest && (typeof data.tests.best[h.testId] !== 'number' || h.pct > data.tests.best[h.testId])) {
-          data.tests.best[h.testId] = h.pct;
-        }
-        data.tests.last[h.testId] = h.pct;
-      });
-      const now = Date.now();
-      const rows = Object.keys(data.tests.best).map((testId) => {
-        const lastEntry = [...data.tests.history].reverse().find((h) => h.testId === testId);
-        return { user_id: uid, test_id: testId, best_pct: data.tests.best[testId], last_pct: lastEntry ? lastEntry.pct : (data.tests.last[testId] ?? null), client_updated_at: now };
-      });
-      if (rows.length) {
-        const { error } = await sb.from('test_scores').upsert(rows, { onConflict: 'user_id,test_id' });
-        if (error) warn('pull test_scores upsert', error);
-      }
-    }
-
-    /* La caché de wrong_answers solo aumenta los contadores locales. */
-    if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
+    /* Pull de agregados independiente de la ventana de history; nunca hace upsert. */
     try {
-      const { data: cache, error } = await sb.from('wrong_answers')
-        .select('test_id, question_key, count')
-        .eq('user_id', uid)
-        .limit(500);
+      const { data: rows, error } = await sb.from('test_scores')
+        .select('test_id, best_pct, last_pct').eq('user_id', uid);
       if (error) throw new Error(error.message);
-      if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
-      (cache || []).forEach((r) => {
-        const bucket = data.tests.wrong[r.test_id] || {};
-        const cur = bucket[r.question_key];
-        if (typeof cur !== 'number' || cur < r.count) {
-          data.tests.wrong[r.test_id] = bucket;
-          bucket[r.question_key] = r.count;
-          localChanged = true;
-        }
-      });
-    } catch (err) { warn('pull wrong_answers', err); }
+      if (sessionChangedFor(sessionHandle)) return localChanged;
+      localChanged = mergeTestScores(data, rows || [], remoteAttempts) || localChanged;
+    } catch (err) { warn('pull test_scores', err); }
+
+    /* wrong_answers no tiene materializador versionado: reconstruir eventos completos. */
+    if (sessionChangedFor(sessionHandle)) return localChanged;
+    try {
+      const events = await readEventRows('wrong_answer_events', 'test_id,question_key,event_type,count_delta,created_at,client_created_at', uid, sessionHandle);
+      if (!events || sessionChangedFor(sessionHandle)) return localChanged;
+      localChanged = replayWrong(data, events, readQueue(sessionHandle.owner)) || localChanged;
+    } catch (err) { warn('pull wrong_answer_events', err); }
 
     /* --- streak_days: unión de días --- */
     try {
@@ -1346,27 +1367,38 @@
       }
     } catch (err) { warn('pull streak_days', err); }
 
-    /* --- study_sessions y activity_events: solo refuerzan métricas derivadas --- */
+    /* Actividad reciente: misma identidad local (incluido type), sin reencolar. */
     try {
-      const { data: sessions, error } = await sb.from('study_sessions')
-        .select('minutes, steps, created_at')
-        .eq('user_id', uid)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const { data: activity, error } = await sb.from('activity_events')
+        .select('event_type,label,meta,created_at').eq('user_id', uid)
+        .order('created_at', { ascending: false }).limit(40);
       if (error) throw new Error(error.message);
-      if (sessionChangedFor(sessionHandle) || SMR.progress.data !== dataRefAtStart) return localChanged;
-      const seen = new Set((data.studySessions || []).map((s) => `${s.ts}|${s.minutes}|${s.steps}`));
-      (sessions || []).forEach((s) => {
-        if (!seen.has(`${s.created_at}|${s.minutes}|${s.steps}`)) {
-          data.studySessions.push({ ts: s.created_at, minutes: s.minutes, steps: s.steps });
-          localChanged = true;
-        }
+      if (sessionChangedFor(sessionHandle)) return localChanged;
+      const before = JSON.stringify(data.activity);
+      const merged = new Map();
+      data.activity.concat((activity || []).map(e => ({ type: e.event_type, label: e.label, meta: e.meta || '', ts: e.created_at })))
+        .forEach(e => { merged.set(JSON.stringify([e.ts, e.type, e.label, e.meta || '']), e); });
+      data.activity = [...merged.values()].sort((a,b) => a.ts - b.ts).slice(-40);
+      localChanged = before !== JSON.stringify(data.activity) || localChanged;
+    } catch (err) { warn('pull activity_events', err); }
+
+    /* Total histórico de eventos disponibles; solo la lista visible se limita a 20. */
+    try {
+      const sessions = await readEventRows('study_sessions', 'minutes,steps,created_at', uid, sessionHandle);
+      if (!sessions || sessionChangedFor(sessionHandle)) return localChanged;
+      const queue = readQueue(sessionHandle.owner);
+      const before = JSON.stringify([data.studySessions, data.studyMinutes]);
+      const merged = new Map();
+      sessions.concat(data.studySessions.map(s => ({ created_at: s.ts, minutes: s.minutes, steps: s.steps })),
+        queue.sessions || [], (queue.failed || {}).sessions || []).forEach(s => {
+        if (!Number.isFinite(s.created_at) || !Number.isFinite(s.minutes) || s.minutes < 0 || !Number.isFinite(s.steps) || s.steps < 0) return;
+        merged.set(EVENT_KEYS.sessions(s), { ts: s.created_at, minutes: s.minutes, steps: s.steps });
       });
-      if (localChanged) {
-        data.studySessions.sort((a, b) => a.ts - b.ts);
-        if (data.studySessions.length > 20) data.studySessions = data.studySessions.slice(-20);
-        data.studyMinutes = Math.max(data.studyMinutes || 0, data.studySessions.reduce((n, s) => n + (s.minutes || 0), 0));
-      }
+      const all = [...merged.values()].sort((a,b) => a.ts - b.ts);
+      // MAX conserva el total legacy, que puede incluir sesiones ya no recuperables.
+      data.studyMinutes = Math.max(data.studyMinutes || 0, all.reduce((n,s) => n + s.minutes, 0));
+      data.studySessions = all.slice(-20);
+      localChanged = before !== JSON.stringify([data.studySessions, data.studyMinutes]) || localChanged;
     } catch (err) { warn('pull study_sessions', err); }
 
     /* si el estado vivo ya es de otro dueño, NO persistir:
@@ -1392,7 +1424,6 @@
      los eventos se conservan donde estaban. */
   function adoptUnattributedEvents(uid) {
     const target = readQueueFor(uid);
-    let targetChanged = false;
     [LEGACY_QUEUE_KEY, QUEUE_PREFIX + 'guest'].forEach((key) => {
       const raw = SMR.store.get(key, null);
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
@@ -1404,7 +1435,7 @@
         const keyFn = EVENT_KEYS[kind];
         entries.forEach((e) => {
           const k = keyFn(e);
-          if (!target[kind].some((x) => keyFn(x) === k)) { target[kind].push(e); targetChanged = true; }
+          if (!target[kind].some((x) => keyFn(x) === k)) target[kind].push(e);
         });
         /* retirar SOLO los arrays adoptados; `failed` y otros restos se
            conservan en su clave original (política: no borrar nada) */
@@ -1412,14 +1443,13 @@
         sourceChanged = true;
       });
       if (sourceChanged) {
-        const leftover = Object.keys(raw).some((k) => (Array.isArray(raw[k]) ? raw[k].length > 0 : false));
-        if (leftover) SMR.store.set(key, raw); else SMR.store.remove(key);
+        if (SMR.store.set(QUEUE_PREFIX + uid, target) !== true) return;
+        SMR.store.set(key, raw); /* conservar failed y campos desconocidos */
       }
     });
-    if (targetChanged) writeQueueFor(uid, target);
   }
 
-  function initialSync(user) {
+  function initialSync(user, adoptGuest = false) {
     if (!user) return Promise.resolve();
     runtime.currentUser = user;
     /* El sync inicial se identifica por usuario: una operación en vuelo
@@ -1435,7 +1465,7 @@
       try {
         if (runtime.currentUser !== user) return;
         const uid = user.id;
-        adoptUnattributedEvents(uid);
+        if (adoptGuest) adoptUnattributedEvents(uid);
         /* el sync inicial lleva su propio handle de sesión
            para que ninguna de sus escrituras cloud consuma el estado de
            otra cuenta instalado mientras los awaits están en vuelo. */
@@ -1805,6 +1835,7 @@
 
       if (user) {
         if (runtime.currentUser !== user) {
+          let canAdoptGuest = false;
           if (prevOwner !== nextOwner) {
             /* el progreso de
                VISITANTE custodiado en __guest__ se ADOPTA solo si esta
@@ -1831,7 +1862,7 @@
               } catch (e) { /* sin localStorage: nadie */ }
               return false;
             })();
-            const canAdoptGuest = !!guestStored && !targetHasSlot && !anyOtherAccountSlot;
+            canAdoptGuest = !!guestStored && !targetHasSlot && !anyOtherAccountSlot;
             if (canAdoptGuest) {
               restoreSlotFor(GUEST_OWNER);      /* el visitante pasa a la cuenta (una única vez: al restaurar el slot se usa y el target se compone) */
               archiveSlotFor(nextOwner, Date.now());   /* custodiar lo adoptado como contenido del dueño */
@@ -1859,7 +1890,7 @@
           SMR.progress.data = sanitizeProgressLocal();
           runtime.currentUser = user;
           runtime.lastSnapshot = snapshotProgress(SMR.progress.data);
-          initialSync(user);
+          initialSync(user, canAdoptGuest);
         }
       } else {
         /* al salir NO se toca ninguna cola — los eventos
