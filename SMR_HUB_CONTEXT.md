@@ -1,8 +1,8 @@
 # SMR Hub — contexto para continuar el proyecto
 
-## ESTADO CANÓNICO ACTUAL — actualizado 2026-11-01 — commit d754af427b1157c88f67f6c15ff9387b9fa4e732
+## ESTADO CANÓNICO ACTUAL — actualizado 2026-11-04 — bloque cloud pendiente sobre 19f7af2
 
-Auditoría maestra de base: 2026-10-31, commit b0ad8b2. Actualización documental de P1-A/H1, P1-B/H2 y P1-C.0; no constituye una nueva auditoría completa. H2 está corregido en cliente, con validación de Supabase/RLS real pendiente.
+Auditoría maestra de base: 2026-10-31, b0ad8b2. Programa de estabilización ejecutado sobre c75dc2814a671183d4d99e284ad26ff1e103e60a; base Git actual 19f7af2b7ec7c71934caf866e467653990e836f6 (main = origin/main local). P1-C.1–C.4, H3 y H4 corregidos en cliente con los límites de §6/§8. CLIENTE: APROBADO CON LÍMITES DOCUMENTADOS. BACKEND REAL: NO VERIFICADO; Supabase/RLS y decisiones de identidad pendientes. Sin commit, push, deploy ni migraciones.
 
 Esta sección y las siguientes describen la copia local auditada. Sustituyen las antiguas listas de “fase actual 8.5” y de pendientes acumulados. Código > tests actuales > ejecución > configuración > esquema > Git > documentos. Una funcionalidad presente en el cliente no demuestra que su backend esté desplegado.
 
@@ -10,21 +10,21 @@ Esta sección y las siguientes describen la copia local auditada. Sustituyen las
 
 | Punto | Estado actual |
 | --- | --- |
-| A. Commit | `d754af427b1157c88f67f6c15ff9387b9fa4e732`, `main`, mensaje `fix(cloud): aislar respuestas tardías por propietario`. La auditoría base y validaciones anteriores se conservan como historia. |
+| A. Base Git | `19f7af2b7ec7c71934caf866e467653990e836f6`, main = origin/main local, `fix(tests): corregir examen y modo adaptativo`. Programa iniciado sobre c75dc28; bloque cloud actual sin commit. |
 | B. Arquitectura | SPA estática de scripts clásicos, globals compartidos, 17 rutas, datos educativos locales, progreso local-first y adaptadores Supabase. |
-| C. Completo en el alcance del cliente | Modo Estudio v1, recursos publicados, glosario, casos, navegación/routing, exportación imprimible y SEO P1 técnico. Tests evaluados disponibles con defectos concretos abajo. |
+| C. Completo en el alcance del cliente | Modo Estudio v1, recursos publicados, glosario, casos, navegación/routing, exportación imprimible y SEO P1 técnico. Examen y adaptativo corregidos y comprobados localmente. |
 | D. Parcial | Ciclo de cuenta, restauración cloud de algunos dominios, currículo, tabla de puertos y algunas métricas. No declarar todo “cloud completo”. |
 | E. Ausente | Eliminación de cuenta, cambio de contraseña desde perfil, exportación/importación JSON en UI, reanudación/cola persistida de estudio, CI versionada, monetización y analítica de uso integrada. |
-| F. Defectos reproducibles | H1 RESUELTO en 801c006. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL (ad2eb22). P1-C.0 corregido en cliente, pendiente validación backend real; H3–H6 y los demás pendientes conservan su estado. |
+| F. Defectos reproducibles | H1 RESUELTO en 801c006. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL (ad2eb22). P1-C.0–C.4 corregidos en cliente con límites; H3/H4 integrados en 19f7af2. H5/H6 conservan pendientes de identidad/datos legacy y validación backend real. |
 | G. Límites aceptados del diseño | localStorage sin transacción entre procesos/claves; límites de ventanas; lock sin timeout; conflictos SRS por nivel máximo y borrados tardíos. |
 | H. Cloud | Nueve migraciones y 17 tablas versionadas, RPC/RLS inspeccionadas. Aplicación actual en BD local o producción: no certificada. Staging antiguo: solo evidencia histórica. |
 | I. PWA | SW v5, caché por montaje, 32 entradas de precache; arranque y estudio offline después de calentamiento. Configuración pública excluida de caché. |
 | J. SEO | Cuatro HTML generados, seis URLs de sitemap; metadata SPA por ruta. Sin evidencia actual de Search Console/indexación o rendimiento público. P2 SEO no iniciado aquí. |
 | K. Contenido | 154 preguntas, siete tests/categorías, 19 recursos, 51 términos, 55 temas, seis casos, cuatro rutas, 19 currículos y 227 instancias de módulos. 51 incidencias de contenido registradas; cero puertos. |
-| L. Validación | P1-C.0: 31 suites, 518 checks, 0 fallos; 62 JS correctos; multi-pestaña simulada. Supabase/RLS real pendiente. Evidencia de fases anteriores separada en §9. |
-| M. Prioridades | P0 no observado dentro del alcance; P1 validación backend real de H2 y restauración cloud de errores; P2 motor de tests/contenido/semántica; P3 documentación auxiliar/API sin uso. |
+| L. Validación | Programa actual: 32 suites, 589 checks, 0 fallos; 63 JS correctos; SEO --check y routing/PWA PASS. Escritorio, móvil, offline y dos pestañas reales locales. Cloud/owner con mocks; Supabase/RLS real pendiente. Historia separada en §9. |
+| M. Prioridades | Validación backend real; decidir identidades y empates de eventos, atomicidad de agregados y legado. Contenido/semánticas P2 y documentación auxiliar P3 siguen pendientes. |
 | N. Deuda | Fixtures de historial corregidos en P1-A; permanecen arneses históricos obsoletos, extracción literal de funciones en tests, SDK CDN sin versión exacta, ausencia de CI. |
-| O. Orden recomendado | Corregir P1 → verificar/completar roundtrip cloud → corregir examen/adaptativo → automatizar regresión segura → decidir cuenta y contenido. Detalle en ROADMAP. |
+| O. Orden recomendado | Verificar backend real → acordar cambios coordinados cliente/SQL y decisiones de datos → automatizar regresión segura → decidir cuenta y contenido. Detalle en ROADMAP. |
 
 ### Procedencia y límites de esta auditoría
 
@@ -32,7 +32,7 @@ Preflight ejecutado: `git status --short --branch`, `git log -1 --oneline`, `git
 
 Estado inicial: `## main...origin/main`, sin diferencias rastreadas. No rastreados preservados: `.claude/`, `.playwright-cli/`, `SMR_HUB_ESTADO_2026-10-26.md`, `SMR_HUB_GRAFO.graphify.json`, `SMR_HUB_GRAFO_2026-10-26.graphify.json`, `SMR_HUB_SELECTORES_2026-10-26.md`.
 
-Solo se actualizaron este archivo y `SMR_HUB_ROADMAP.md`. No se ejecutaron commit, push, deploy, migraciones, cambios de producción ni operaciones Git de limpieza/restauración. No se crearon usuarios ni se enviaron comentarios. Las interacciones del navegador usaron un origen HTTP local y un perfil aislado con datos de prueba.
+En el programa actual se modificaron js/cloud-progress.js, js/tests.js y sus regresiones; la documentación se actualizó únicamente al terminar y solo en este archivo y SMR_HUB_ROADMAP.md. No se ejecutaron commit, push, deploy, migraciones, cambios de producción ni operaciones Git de limpieza/restauración. No se crearon usuarios ni se enviaron comentarios. Las interacciones del navegador usaron un origen HTTP local y un perfil aislado con datos de prueba.
 
 No se certifican Supabase real, entrega de correo, sesiones reales autenticadas, RLS ejecutada en PostgreSQL, dispositivos físicos, carga, auditoría de seguridad exhaustiva ni normativa académica vigente. No se consultó producción ni Search Console.
 
@@ -49,7 +49,7 @@ No se certifican Supabase real, entrega de correo, sesiones reales autenticadas,
 
 ## 2. Inventario y arquitectura
 
-107 archivos rastreados al iniciar: seis HTML, cuatro CSS, 25 scripts en `js/`, una Pages Function, un SW, un manifest, un generador, nueve migraciones y las pruebas/documentos auxiliares. No hay package.json, bundler, node_modules versionado ni flujo CI versionado. `scratch_*`, `backup_6c/` y herramientas locales ignoradas son material histórico, no entradas de la aplicación.
+109 archivos rastreados al iniciar el programa; tests/test-engine.test.js se integró posteriormente en 19f7af2: seis HTML, cuatro CSS, 25 scripts en `js/`, una Pages Function, un SW, un manifest, un generador, nueve migraciones y las pruebas/documentos auxiliares. No hay package.json, bundler, node_modules versionado ni flujo CI versionado. `scratch_*`, `backup_6c/` y herramientas locales ignoradas son material histórico, no entradas de la aplicación.
 
 | Área / archivos | Responsabilidad real |
 | --- | --- |
@@ -73,7 +73,7 @@ No se certifican Supabase real, entrega de correo, sesiones reales autenticadas,
 | `js/auth.js`, `cloud-profile.js`, `cloud-progress.js`, `cloud-feedback.js` | Autenticación, perfil, slots/colas/sync y envíos explícitos por RPC. |
 | `scripts/build-seo.js`, `robots.txt`, `sitemap.xml` | Generación/validación de landings y descubrimiento técnico. |
 | `supabase/config.toml`, `supabase/migrations/` | Configuración de desarrollo y contrato SQL; no evidencia de despliegue. |
-| `tests/` | 29 suites Node, un navegador real, dos helpers, baseline y cinco scripts shell incluido runner. |
+| `tests/` | 32 suites Node (incluida test-engine nueva), un navegador real, dos helpers, baseline y cinco scripts shell incluido runner. |
 | Assets | `assets/brand/SMR.png` (512), `icon-192.png`, `favicon.png`. Iconos restantes se generan como SVG inline. |
 
 Carga real: primero `routing.js` mediante bloque inline; scripts defer educativos en orden `data → curriculum → content → questions → seo-content → srs → topics → questionTopics → tools → tests → pdf-export → dashboard → profile → offline-store → app`; después SDK Supabase CDN, fallback config, cliente, auth y adaptadores. Son 22 etiquetas defer, incluida la externa. La configuración pública se solicita síncronamente mediante `document.write` antes de ejecutar los defer; no es un script defer entre SDK y fallback como sugiere DESPLIEGUE.
@@ -85,7 +85,7 @@ Los globals son `SMR_DATA`, `SMR`, `SMR_TESTS` y `SMR_TOOLS`. Hay dependencias d
 | Superficie | Estado y comportamiento comprobado |
 | --- | --- |
 | Inicio | COMPLETA en cliente: contenido público, accesos, recomendaciones derivadas y tarjetas de progreso; visitante no necesita cuenta. Widget auth separado. |
-| Tests | PARCIAL por defectos §8: siete bancos; práctica, rápido, completo, examen simple/general multi-banco, errores, SRS y adaptativo; revisión, explicaciones, recomendaciones y resultados. |
+| Tests | Implementados con límites de métricas/identidad §8: siete bancos; práctica, rápido, completo, examen simple/general multi-banco, errores, SRS y adaptativo; revisión, explicaciones, recomendaciones y resultados. |
 | Modo Estudio v1 | COMPLETA en su alcance: cinco fuentes, guiado separado, revelado, recurso válido, rating opcional, finalización e integración de métricas. §4. |
 | Recursos | COMPLETA para 19 publicados: búsqueda, categoría, nivel, favoritos, modal, vistos, completado y autoevaluación. Hay categorías sin recursos y relaciones pendientes declaradas. |
 | Glosario | COMPLETA para 51 términos: búsqueda, categorías/letras, favoritos y relaciones heurísticas con recursos; HTML inicial y enriquecimiento SPA. Estas relaciones no son el mapping canónico contentTopics. |
@@ -93,7 +93,7 @@ Los globals son `SMR_DATA`, `SMR`, `SMR_TESTS` y `SMR_TOOLS`. Hay dependencias d
 | Rutas de aprendizaje | PARCIAL en contenido: cuatro secuencias, 19 pasos declarados, 12 con recurso y siete pendientes visibles. Avance derivado de recursos completados, sin tabla propia de rutas. |
 | Currículo / Mi SMR | PARCIAL académico: catálogo de 19 territorios, selector comunidad/curso/año, estados/fuentes y módulos. No filtra el estudio por módulo oficial. |
 | Dashboard | COMPLETA como vista derivada, con límites de métricas §5: maestría por banco, hábitos y repaso inteligente vencidas→errores; selección máxima por defecto 20, orden conservado. |
-| Estadísticas | Vista disponible con tests, recursos, errores, sesiones, minutos, actividad y racha. Estudio sin tests también activa la vista. Sus cifras siguen limitadas por las ventanas retenidas; la pérdida de historial H1 está resuelta. |
+| Estadísticas | Vista disponible con tests, recursos, errores, sesiones, minutos, actividad y racha. Estudio sin tests también activa la vista. Las listas siguen limitadas por ventanas; los minutos se reconstruyen desde todos los eventos disponibles, separados de las 20 sesiones visibles. H1 está resuelto. |
 | Perfil | COMPLETA selección académica local; adaptador cloud presente y protegido por token de slot. No es un gestor completo de identidad/cuenta. |
 | Exportar examen | COMPLETA generación HTML imprimible A4 mediante window.print; tema raw, banco, cantidad hasta 100, nombre opcional y soluciones. No genera bytes PDF por sí misma. El usuario guarda desde el diálogo del navegador. |
 | JSON | NO EXISTE exportación/importación de progreso en UI/API específica; serializar localStorage internamente no equivale a esta función. |
@@ -206,24 +206,39 @@ Tablas: profiles, student_settings, resource_state, test_scores, test_attempts, 
 
 RPC: sync_progress_chunk para test_attempts/study_sessions/activity_events/wrong_answer_events; merge_srs_cards para estado SRS; submit_feedback y submit_question_report para envíos. Las últimas usan SECURITY DEFINER, search_path vacío, auth.uid(), validación y lock por usuario; límites 5 comentarios/20 reportes por hora. No son una API de administración. RPC de progreso/SRS usa SECURITY INVOKER y RLS; provisioning tiene trigger propio. rls-static comprueba el SQL, no su despliegue.
 
-### Qué sincroniza realmente
+### Matriz de roundtrip tras el programa
 
-| Dominio | Flujo actual y límite |
-| --- | --- |
-| Perfil | Espera slot; local configurado gana al entrar, si vacío importa remoto; edición posterior sube. No LWW genérico por reloj. |
-| Best/last | Lectura/merge/upsert test_scores; best MAX, last por intento disponible. Histórico limitado y semántica de subconjuntos afectan métricas. |
-| Intentos | Cola por UID → RPC idempotente → pull últimos 200 → history local máximo 60. |
-| Errores | Se envían add/clear a wrong_answer_events; pull solo lee wrong_answers y aumenta contadores. No hay replay de eventos ni mantenimiento de esa caché en SQL versionado. Roundtrip incompleto: H5. |
-| Recursos | Pull/merge/upsert; vistos, completado con completed_cleared_at y autoevaluación/fecha. |
-| Casos | case_solutions por propietario y resolución temporal. |
-| SRS | Pull→merge→push, claves estables; RPC serializa conflicto. Nivel mayor gana; igual nivel, due mayor; empate, client_updated_at. |
-| Borrado SRS | Marca pending→known, revive explícito; deleted_at pegajoso sellado por servidor. UI no promete borrado remoto inmediato. |
-| Sesiones | Envío por study_sessions; pull 50, retiene 20 y refuerza studyMinutes con suma retenida. No restaura todo el total histórico en dispositivo nuevo. |
-| Actividad | Se envían activity_events; no hay pull de su lista. Actividad reciente puede quedar vacía en dispositivo nuevo aunque existan eventos remotos. |
-| Racha | Unión de streak_days, pull 400; dashboard recalcula además con actividad/history/sesiones disponibles. Ventanas limitan interpretación. |
-| Favoritos / ajustes | Solo dispositivo; las tablas favorites/student_settings existen pero no están conectadas a sincronización del cliente. |
-| Entitlements | Esquema sin consumidor UI/flujo comercial. |
-| Feedback/reportes | Envío explícito autenticado sin reintento automático; validación de token antes/después. |
+Todas las filas describen cliente/código SQL versionado y pruebas simuladas. **Backend real NO VERIFICADO**: 127.0.0.1:54321/auth/v1/health rechazó conexión. No se inició un stack ni se aplicó SQL. No se declara ROUNDTRIP COMPLETO. El pull es inicial, no suscripción en tiempo real; los límites anteriores de ventanas se conservan donde se indica.
+
+| Dominio | Push | Cloud (contrato, no certificado) | Pull | Reconstrucción | Merge / estado |
+| --- | --- | --- | --- | --- | --- |
+| resources / viewed | Estado | resource_state | Lectura fresca | Mapa viewed | MAX timestamp; cliente probado |
+| completed | Estado + marca clear | resource_state | Lectura fresca | completed/cleared_at | Respeta clear; cliente probado |
+| self assessments | Estado | resource_state | Lectura fresca | Valor disponible | Fecha local heurística (viewed/ahora); límite de conflictos vigente |
+| best | Estado | test_scores | Agregado + intentos recientes | MAX local/remoto/history | Pull sin upsert, no degrada 100→50; push read/merge/write no atómico |
+| last | Estado | test_scores + test_attempts | Agregado + últimos 200 intentos | Último intento conocido disponible | Ventana 200; sin intentos válidos, agregado remoto de respaldo; no garantiza el último intento histórico absoluto |
+| history | Cola/RPC | test_attempts | Últimos 200 | Unión, conserva 60 | Identidad SQL banco/modo/ms; colisiones pendientes |
+| wrong | Cola/RPC add/clear | wrong_answer_events | Todas las páginas por id | Replay por grupos de timestamp + pending/failed | Idempotente; empate conservador sin bloquear lo posterior; clear inequívoco posterior reinicia; conserva huérfanas y MAX legacy |
+| SRS | RPC merge/tombstone | srs_cards | Hasta 500 | Solo IDs resolubles | Política max-level/due y tombstones vigente; cliente probado, límites sin cambiar |
+| cases | Estado | case_solutions | Lectura fresca | solved | Timestamp de resolución; cliente probado |
+| studySessions | Cola/RPC | study_sessions | Todas las páginas por id | Unión por fecha/minutos/pasos | Retiene 20 recientes; pending/failed conservados |
+| studyMinutes | Derivado de eventos | study_sessions | Todas las páginas | Suma única antes de limitar lista | MAX con total legacy; no reconstruye eventos ya perdidos/no subidos |
+| activity | Cola/RPC | activity_events | Últimos 40 | Orden ascendente, type/label/meta/ts | Identidad local completa; colisión SQL sin event_type pendiente |
+| streak | Días | streak_days | Últimos 400 | Días consecutivos disponibles | Conserva política MAX previa; no certifica racha histórica ilimitada |
+| profile | Perfil por UID | profiles | Con awaitSlot/token | Perfil académico normalizado | Local configurado gana, vacío importa; cliente probado |
+
+Favoritos/ajustes siguen solo en dispositivo; entitlements no tiene consumidor. Feedback/reportes siguen explícitos autenticados, sin cola automática. No se añadieron tablas ni se copió SMR_DATA a Supabase.
+
+### Identidades y decisiones que siguen abiertas
+
+| Evento | Identidad actual | Clasificación / evidencia |
+| --- | --- | --- |
+| test_attempts | UID + banco + modo + ms | Requiere cambio coordinado cliente/SQL: dos intentos distintos con igual banco/modo/ms conservan dos history locales pero solo uno cloud. No se cambia la identidad local de H1. |
+| study_sessions | UID + ms + minutos + pasos | P2 aceptable bajo contrato de tupla; dos sesiones idénticas son indistinguibles al restaurar. Separarlas exige identidad coordinada. |
+| activity_events | UID + label + meta + ms | Requiere cliente/SQL coordinados: excluye event_type; dos tipos se reducen a uno. El nuevo pull conserva type y no elimina los dos eventos locales. |
+| wrong_answer_events | UID + banco + pregunta + tipo + coalesce(client_created_at,created_at) | Dedupe cliente ahora coincide con RPC y evita ambigüedad de separadores. Dos adds independientes iguales/ms colisionan: cambio coordinado. Add/clear final del mismo ms sin clear inequívoco posterior: **NEEDS DECISION**; se conserva la política MAX legacy y los eventos. La ambigüedad no bloquea grupos posteriores. |
+
+Diseño pendiente, NO aplicado: versionar RPC/cola y una identidad de evento persistida que distinga acciones reales y conserve identidad en reintentos; revisar UNIQUE/anti-joins manteniendo compatibilidad con eventos legacy e idempotencia de chunks. Para activity, incluir event_type exige cambiar juntos clave de cola, partición/anti-join RPC y UNIQUE. Ningún cambio recupera eventos ya descartados por colisión. best requiere un merge MAX atómico servidor (y una fecha real de intento para last), no prometer atomicidad por select+upsert. Un materializador de wrong_answers es opcional para volumen: replay por usuario/pregunta, dedupe RPC y política de empates aprobada, con eventos históricos intactos; el cliente actual no depende de esa caché. No hay fichero de migración nuevo ni SQL ejecutado.
 
 Límites SRS: pull 500 sin paginación, tombstones incluidos; remotas no resolubles no se asignan ni borran. Revalorar a nivel menor puede perder contra el mayor remoto. Revive conserva posible nivel alto previo; una valoración antes de conocer un tombstone puede perderse; tombstone obsoleto entregado tras revive confirmado vuelve a borrar según SQL actual. Son políticas/límites conocidos, no fallos nuevos de aislamiento.
 
@@ -305,16 +320,16 @@ Cloudflare es canonical también en el mirror. P1 técnico está integrado; las 
 
 ## 8. Estado de defectos, riesgos y límites
 
-Ningún P0 observado en la auditoría base. H1 está RESUELTO. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL. H3–H6 y los demás P1 permanecen pendientes.
+Ningún P0 observado en la auditoría base. H1 permanece RESUELTO y H2/P1-C.0 corregidos en cliente, pendientes de backend real. H3/H4 integrados en 19f7af2. P1-C.1–C.4 corregidos en sus recorridos definidos, con las excepciones y decisiones de §6; no cerrar cloud extremo a extremo.
 
 | ID / prioridad | Evidencia actual y reproducción | Consecuencia / siguiente prueba |
 | --- | --- | --- |
 | H1 / P1 — RESUELTO | Causa anterior: tests.history deduplicaba con ts/score aunque recordTest persiste date/pct. Corregido en 801c006: identidad tolerante por los siete campos testId, mode, date, pct, correct, total y title, con fallback ts/score; orden por date y límite de 60 entradas conservado. | Validado antes/después con prueba de regresión y dos pestañas reales, incluida recarga de ambas. 29 suites versionadas, 486 checks, cero fallos. Sin migración ni cambio de esquema. |
 | H2 / P1 — CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL | Causa anterior: handleSession comprobaba solo si existía sesión previa, sin comparar UID, y profileEnsured no se reiniciaba al cambiar directamente de propietario. En ad2eb22 se compara UID, reinicia el provisioning por propietario y anuncia B antes de esperar red. Los guards existentes protegen frente a provisioning/perfil tardíos de A; eventos repetidos del mismo UID no duplican transición. | Nueva tests/auth-owner.test.js: consumidores reales con SDK/DOM/almacenamiento simulados; multi-pestaña y operaciones async tardías verificadas. 30 suites, 493 checks, cero fallos; 61 JS con sintaxis correcta. NO se validó Supabase real ni RLS real porque el backend local no estaba disponible. |
-| H3 / P2 | tests.js renderQuestion añade .correct/.wrong y quiz-explain ok/bad aunque cfg.explain=false. En examen real se vio una opción .correct antes del resultado con texto “detalle al finalizar”. | Revela corrección anticipada y contradice “sin pistas”. Probar modo examen correcto/incorrecto sin colores reveladores hasta finalizar. |
-| H4 / P2 | renderAdaptiveQuestion pone adaptive.streak=0 en cada pregunta. next solo suma/resta una vez. Con función real y cuatro aciertos: niveles [0,0,0,0], racha final 1. | Regla “dos aciertos suben/dos fallos bajan” no se alcanza por racha. El agotamiento de buckets aún puede mostrar otras dificultades, no es adaptación según aciertos. |
-| H5 / P1 integración cloud | Código envía wrong_answer_events pero nunca los lee/reproduce; pull solo consume wrong_answers con MAX. Ninguna migración versionada mantiene esa caché al insertar eventos. Verificado por búsqueda de todos los productores/consumidores y SQL. | Un dispositivo nuevo no puede reconstruir errores a partir del contrato versionado; clears remotos no eliminan contador local por ese pull. No se presenta como incidente confirmado en producción, donde podrían existir componentes no versionados. Exige roundtrip con BD local autorizada. |
-| H6 / P2 | No pull de activity_events; studyMinutes se refuerza desde las últimas 20 sesiones retenidas tras pull limitado a 50. | El dispositivo nuevo no recupera lista de actividad ni minutos de toda la vida. Es sync parcial, no copia completa del progreso. |
+| H3 / P2 — RESUELTO EN CLIENTE | cfg.explain controla colores de opciones y ok/bad; examen confirma respuesta sin corregir. | Tests simples/multi, acierto/fallo y práctica; navegador con diez respuestas neutrales y revisión final completa. |
+| H4 / P2 — RESUELTO EN CLIENTE | Racha se mantiene hasta umbral ±2 y cambia de signo al cambiar acierto/fallo. | ++, --, +-, -+, rachas largas, límites y agotamiento; navegador doce preguntas con niveles 1,1,2,2,3,3,3,3,2,2,1,1. |
+| H5 / P1 — CORREGIDO EN CLIENTE CON LÍMITES | Replay paginado completo de wrong_answer_events, más pending/failed, sin depender de wrong_answers. | Add/add/clear, dos dispositivos, orden, duplicados, huérfanas, offline y owner probados con transporte simulado. Empates/colisiones y contadores legacy sin eventos pendientes; backend real NO VERIFICADO. |
+| H6 / P2 — CORREGIDO EN CLIENTE CON LÍMITES | Pull de actividad reciente; minutos desde todas las sesiones disponibles antes de retener 20. | 0/1/20/21/25/51/205, duplicados, pulls repetidos y dos dispositivos. Persisten colisiones de identidad y datos legacy perdidos/no subidos; backend real NO VERIFICADO. |
 
 Límites/decisiones adicionales, separados de defectos reproducidos:
 
@@ -331,6 +346,40 @@ Límites/decisiones adicionales, separados de defectos reproducidos:
 - No CI ni pruebas físicas de accesibilidad/rendimiento/memoria. La evaluación estática de RLS no equivale a auditoría completa de seguridad.
 
 ## 9. Evidencia de validación
+
+### Programa maestro — base inicial c75dc28; cloud pendiente sobre 19f7af2 — cliente aprobado con límites
+
+Subfases secuenciales RED→GREEN: best/last (cinco reproducciones fallidas); wrong (seis); activity (dos); sesiones/minutos (seis); examen (cuatro); adaptativo (seis). Fixtures de navegador/DOM ajustados para cargar SEO real y usar el selector real de recursos; no se cambió producto por errores de instrumentación.
+
+En regresión apareció una mezcla de 12→14 minutos al regresar visitante→A: la cola visitante se adoptaba incluso cuando el slot visitante no podía adoptarse. Se reutilizó canAdoptGuest para autorizar ambas adopciones. La cola fuente solo se limpia después de persistir destino; failed y campos desconocidos se conservan. RED reproducido con tab-merge y dos checks de fallo de escritura/retención; GREEN posterior. No modifica handleSession ni la identidad SRS.
+
+Resultado final combinado: **32 suites, 589 checks, 0 fallos**. tests/cloud-roundtrip-audit.test.js pasa de 25 a 80 checks; tests/test-engine.test.js tiene 15 checks y está integrada en 19f7af2; tab-merge pasa de 29 a 30, ampliando aislamiento de cola visitante y primera adopción elegible. Las demás suites pasan: auth/owner/slots/perfil/concurrencia simulada, SRS, study/guiado/integración/temas, dashboard, herramientas/PDF/feedback, content-integrity (14), SEO (22), PWA (28). Son cliente real sobre VM/DOM/transporte simulados y checks estáticos; no PostgreSQL/RLS real. La regresión completa posterior a los fixes del replay y del arnés confirmó 32 suites y 589 checks sin fallos.
+
+Sintaxis: **63 JS / 0 fallos**, incluidos el nuevo test y todos los JS rastreados. SEO --check: cuatro HTML correctos, sin regenerar. git diff --check: sin errores. No se ejecutó tests/run-all.sh porque incluye los cuatro harnesses SQL mutantes descritos abajo; no se aplicó ninguna migración ni se tocaron fixtures SQL.
+
+Routing navegador: PASS raíz y mirror, con/sin SW; **132 entradas, 132 recargas, 64 internas, 128 historial, 66 offline**, cuatro páginas sin JS y smoke móvil/calculadora/glosario. Smoke adicional real en Chrome aislado, origen HTTP local: **17 vistas escritorio 1366×900 y 17 móvil 390×844 sin overflow**, práctica, examen de diez preguntas neutral hasta revisión y adaptativo de doce con subida/bajada de nivel. Cinco fuentes de estudio, rating SRS, fin explícito, errores/SRS evaluados, guiado y abandono sin registro; recurso con autoevaluación/completado conservados al recargar; perfil académico restaurado. Back/forward y menú móvil comprobados. Dos pestañas reales conservan **5+7 minutos y dos intentos** al recargar ambas. No se usaron cuentas reales.
+
+Offline warm: recarga y cinco fuentes de estudio completas, rating, siete vistas (tests/recursos/glosario/herramientas/dashboard/estadísticas/perfil), examen sin pistas, reconexión y sesiones/perfil persistentes. **Cero excepciones JS de la aplicación**; consola online sin errores. Offline se observó ERR_INTERNET_DISCONNECTED de la petición de configuración excluida de caché, esperable. No se certifica primer arranque sin red ni hardware móvil físico.
+
+Backend: health local rechazó conexión también fuera del sandbox. No se encontró comando seguro de arranque documentado en README/DESPLIEGUE; no se inició ni reparó el stack. **Supabase, RPC/RLS y aislamiento de dos cuentas reales NO VERIFICADOS**. Los tests A→B, logout, A→B→A, cambio de generación, transición pendiente, sustitución de progress y marcador de otra pestaña usan módulos reales con transporte/slots controlados. Errores en segunda página no aplican un replay/total parcial.
+
+Pendientes: identidades y empates de §6, atomicidad servidor best/last, total legacy imposible de reconstruir sin eventos, localStorage no transaccional, límites SRS/streak y decisiones anteriores. H1/H2/P1-C.0 no se reabren; no se declara cloud completo. Producción modificada únicamente en js/cloud-progress.js y js/tests.js; documentación únicamente en CONTEXT/ROADMAP, al final. Sin commit/push/deploy/SQL.
+
+### Cierre de los bloqueos cloud — validado antes de esta actualización documental
+
+CLIENTE: **APROBADO CON LÍMITES DOCUMENTADOS**. BACKEND REAL: **NO VERIFICADO**. No se declara roundtrip cloud completo.
+
+El replay de tests.wrong agrupa eventos por timestamp. Un grupo add+clear simultáneo sigue ambiguo/conservador y no decide un orden interno; esa ambigüedad no bloquea eventos posteriores. Un clear posterior inequívoco reinicia el contador y un add posterior inequívoco vuelve a incrementar. Sin un clear que resuelva la ambigüedad se conserva la política MAX legacy. Pulls repetidos son idempotentes; pending, failed, referencias huérfanas y eventos históricos se conservan. Regresiones: add@1/clear@1/clear@2/add@3 → 1; local=5 con add@1/clear@1/clear@2 → 0. Los empates finales siguen pendientes.
+
+El arnés cloud limita cada caso a **5 segundos**, cubriendo sus esperas críticas, exige finalización explícita y falla si no la alcanza. Autopruebas ejecutadas: normal **exit 0 / 80 checks / FINALIZADO: sí**; espera bloqueada **exit 1 / timeout**; ejecución sin finalización **exit 1 / INCOMPLETE**. La suite conserva 80 checks en total, incluidas cinco regresiones de replay y dos autopruebas del arnés.
+
+Best usa MAX y el pull no degrada best remoto ni hace upsert destructivo. last representa el último intento conocido disponible en la ventana de 200, con agregado como respaldo; no garantiza el último intento histórico absoluto. Actividad conserva pull, orden, límite 40, type y dedupe; su identidad SQL sin event_type sigue pendiente. Sesiones/minutos conserva paginación, suma antes de truncar la lista local a 20 y MAX legacy: datos históricos nunca subidos y ya ausentes localmente no pueden recuperarse.
+
+Pendientes: identidades SQL, atomicidad, empates add/clear finales, datos legacy incompletos y validación Supabase/RLS real. Aislamiento aprobado en cliente con las pruebas de propietario; no equivale a validar RLS real. Esta actualización solo modifica CONTEXT/ROADMAP y no reejecuta pruebas.
+
+Historia de resultados preservada: el programa anterior registró 32 suites / 582 checks, con 73 checks cloud. El cierre posterior añadió siete checks y dejó **32 suites / 589 checks / 0 fallos / 63 JS con sintaxis correcta**.
+
+### Evidencia histórica anterior (no sumar como ejecución nueva)
 
 ### P1-C.0 — Ventanas async de propietario en cloud-progress
 

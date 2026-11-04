@@ -1,10 +1,10 @@
 # SMR Hub — roadmap
 
-## Roadmap vigente — actualizado 2026-11-01
+## Roadmap vigente — actualizado 2026-11-04
 
-Base actual: `d754af427b1157c88f67f6c15ff9387b9fa4e732` — `fix(cloud): aislar respuestas tardías por propietario`, rama main. Auditoría maestra de base: 2026-10-31 (b0ad8b2); esta revisión recoge P1-A/H1 y clasifica H2 como CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL. La referencia principal es SMR_HUB_CONTEXT.md, “ESTADO CANÓNICO ACTUAL”. No se certificó el estado desplegado ni se consultó producción.
+Base Git: 19f7af2b7ec7c71934caf866e467653990e836f6, main = origin/main local, fix(tests): corregir examen y modo adaptativo. Programa iniciado sobre c75dc28; bloque cloud pendiente SIN COMMIT. CLIENTE: APROBADO CON LÍMITES DOCUMENTADOS. BACKEND REAL: NO VERIFICADO; quedan decisiones de datos pendientes. Referencia: SMR_HUB_CONTEXT.md, §6, §8 y §9. Producción no consultada.
 
-Este documento propone el siguiente trabajo; no autoriza implementarlo automáticamente. Esta fase solo actualizó CONTEXT y ROADMAP. No hubo cambios funcionales, commit, push, deploy o migraciones. Antes de cada tarea: comprobar Git, preservar todos los cambios y ajustar alcance a código/tests actuales.
+Este roadmap no autoriza iniciar otra fase. Las correcciones se validaron antes de actualizar únicamente CONTEXT/ROADMAP. No hubo commit, push, deploy ni migraciones. Preservados todos los no rastreados iniciales. Antes de continuar: Git, contratos y alcance de un nuevo encargo.
 
 ## 1. Completado realmente en el cliente
 
@@ -30,7 +30,27 @@ Este documento propone el siguiente trabajo; no autoriza implementarlo automáti
 
 “Integrado” se refiere al repositorio auditado. No usar una fecha de informe antiguo como prueba de SQL, variables de entorno o assets que hoy sirve producción.
 
-### P1-C.0 — Ventanas async de propietario en cloud-progress
+### Programa maestro de estabilización — cierre de cliente, límites explícitos
+
+| Subfase | Estado | Resultado |
+| --- | --- | --- |
+| P1-C.1 best/last | CORREGIDO EN CLIENTE / BACKEND REAL PENDIENTE | Agregados remotos restaurados, best MAX, pull no hace upsert ni rebaja 100→50. last por último intento conocido disponible en ventana 200; sin intentos, respaldo remoto. Sin intentos inventados ni garantía del último histórico absoluto. |
+| P1-C.2 wrong / H5 | CORREGIDO EN CLIENTE CON LÍMITES | Replay paginado por grupos de timestamp, idempotente, dedupe RPC y pending/failed/huérfanas conservados. Grupo add+clear ambiguo no bloquea lo posterior: clear inequívoco reinicia y add posterior incrementa; MAX protege legacy. Empates finales siguen pendientes. No depende de wrong_answers. |
+| P1-C.3 activity / parte H6 | CORREGIDO EN CLIENTE CON LÍMITES | Restaura/ordena/deduplica 40 eventos recientes con type; identidad SQL omite event_type y sigue pendiente. |
+| P1-C.4 sesiones/minutos / parte H6 | CORREGIDO EN CLIENTE CON LÍMITES | Total de todos los eventos disponibles con paginación, unión pending/failed y MAX legacy; solo la lista se corta a 20. No recupera eventos ya perdidos/no subidos. |
+| H3 examen | RESUELTO EN CLIENTE | Respuesta neutral sin correct/wrong/ok/bad ni explicación antes de revisión final; práctica intacta. |
+| H4 adaptativo | RESUELTO EN CLIENTE | Dos aciertos seguidos suben y dos fallos bajan; signo, umbral, límites y fin probados. |
+| Regresión de adopción visitante | RESUELTA EN CLIENTE | Cola adopta solo con canAdoptGuest; no mezcla minutos al volver a cuenta existente. Persiste destino antes de limpiar fuente y conserva failed/campos desconocidos. |
+
+Validación actual: **32 suites, 589 checks, 0 fallos; 63 JS válidos**, SEO --check, PWA y routing PASS. Cloud-roundtrip-audit: 80 checks; test-engine integrada: 15; tab-merge: 30. RED→GREEN por subfase y regresión tras corregir adopción. Navegador: 17 vistas escritorio y móvil sin overflow, examen/adaptativo, estudio y guiado, recursos, perfil, dos pestañas reales (+12 min/+2 intentos), cinco fuentes offline y reconexión. Matriz por los 14 dominios, identidad y límites en CONTEXT §6. **No declarar roundtrip completo**: health Supabase local rechazó conexión; RPC/RLS/dos cuentas reales NO VERIFICADOS.
+
+El arnés cloud tiene timeout de **5 segundos por caso**, cubriendo cada espera crítica, y finalización explícita obligatoria. Autopruebas validadas: normal **exit 0 / 80 checks / FINALIZADO: sí**; espera bloqueada **exit 1 / timeout**; ejecución sin finalización **exit 1 / INCOMPLETE**. El replay ya no abandona toda la pregunta por un empate histórico. Los empates finales no están resueltos.
+
+Los datos históricos nunca subidos y ya ausentes localmente no pueden recuperarse. Mantener pendientes identidades SQL, atomicidad, empates finales, datos legacy incompletos y Supabase/RLS real. Aislamiento cliente aprobado; backend real NO VERIFICADO. No declarar roundtrip cloud completo.
+
+Evidencia histórica preservada: antes del cierre de los bloqueos se registraron 32 suites / 582 checks y 73 checks cloud. Después: **32 suites / 589 checks / 0 fallos, cloud 80 y 63 JS correctos**. Esta revisión es documental y no reejecuta pruebas.
+
+### P1-C.0 — Ventanas async de propietario en cloud-progress (historia)
 
 **CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL** — commit d754af427b1157c88f67f6c15ff9387b9fa4e732 (d754af4).
 
@@ -58,23 +78,23 @@ P1-A/H1 está RESUELTO. P1-B/H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BA
 
 Criterio de cierre pendiente para H2: validar contra Supabase/RLS reales en un backend aislado autorizado, con cuentas efímeras, dos pestañas, cambios directos, perfil/progreso/colas correctos y respuestas tardías sin mezcla. No presentar mocks como evidencia real ni reabrir H1. Los demás P1 siguen pendientes.
 
-### 2. P1 — Verificar y completar el roundtrip cloud realmente disponible
+### 2. P1 — Validar roundtrip y acordar lo que requiere SQL/datos
 
-P1-C.0 está corregido en cliente, pendiente validación backend real; no volver a tratar sus guards como una implementación pendiente. Continúan best/last, wrong, activity y studyMinutes/studySessions. Verificar backend en stack local explícitamente autorizado, con cuentas efímeras; no conectar producción por leer este roadmap.
+P1-C.0–C.4 están corregidos en cliente con los límites documentados. No repetirlos como funciones ausentes. Verificar en stack local aislado autorizado el contrato efectivamente aplicado, RPC, RLS, dos cuentas, estados/colas y respuestas tardías; no usar producción ni presentar mocks como backend real.
 
-- **H5:** los eventos add/clear se suben a wrong_answer_events, pero el cliente no hace replay y ninguna migración versionada mantiene wrong_answers. El pull actual solo aumenta contadores de esa caché. Verificar fallo de reconstrucción en un dispositivo limpio y de limpieza entre dispositivos; decidir el mínimo cierre coherente con el modelo existente.
-- **H6:** actividad se sube sin pull y minutos de estudio no se restauran de toda la vida; definir qué continuidad se promete. No inventar métricas históricas ni deducir más de las ventanas disponibles.
-- Separar pruebas de SQL/RLS real, cliente mock, transporte HTTP y UI. Capturar versiones/migraciones efectivamente aplicadas sin modificar la BD durante la inspección.
-- Las nueve migraciones están versionadas; no hay prueba actual de dónde están aplicadas. La vieja frase “00008 solo local” se conserva como historia, no instrucción de despliegue actual.
-- Añadir regresiones de errores add→clear→nuevo dispositivo, SRS, sesiones, colas fallidas y cambio de cuenta. Mantener SMR_DATA estático.
-- Cualquier cambio SQL o aplicación de migraciones requiere un encargo propio y revisión concreta. No crear tablas para estudio.
+- best/last: falta atomicidad servidor de select/merge/upsert concurrente. Diseñar RPC con MAX atómico y semántica de fecha real de intento para last antes de cambiar esquema. last actual usa los intentos fechados disponibles (ventana 200) y agregado si no hay intentos; relojes/timestamps iguales no prueban causalidad.
+- wrong: decidir empate add/clear final del mismo ms sin clear inequívoco posterior (**NEEDS DECISION**). El cliente aplica MAX legacy y conserva eventos; grupos posteriores siguen procesándose. Adds iguales de dispositivos distintos/ms colisionan en identidad legacy. No atribuir contadores legacy sin eventos ni borrar huérfanas. Un materializador SQL es opcional para volumen, requiere replay/dedupe/política de empate y conservar eventos; no existe ni se aplicó uno aquí.
+- activity: incluir event_type requiere coordinar clave de cola, partición/anti-join RPC y UNIQUE. No basta con cambiar cliente. No recuperar por inferencia eventos ya perdidos.
+- test_attempts: banco/modo/ms colisiona incluso con porcentajes distintos; requiere identidad coordinada cliente/SQL. study_sessions: tuplas idénticas son indistinguibles (P2 aceptable bajo el contrato actual); decidir si se deben distinguir acciones separadas.
+- Diseño común pendiente: identidad persistida por acción/reintento, RPC compatible con cola/eventos legacy y UNIQUE revisados en conjunto; idempotencia de chunks preservada. Diseñar/revisar con un encargo propio; NO aplicar SQL por este documento.
+- studyMinutes restaura todos los eventos existentes, no garantiza recuperar sesiones antiguas no subidas y fuera de la ventana local. Se conserva MAX legacy; reconciliar un total sin procedencia completa necesita decisión, no inventar sesiones.
 
-Criterio de cierre: tabla por dominio con envío/restauración/merge real y limitaciones explícitas; ningún test mock se presenta como RLS desplegada.
+Criterio de cierre: validar todas las direcciones de la matriz CONTEXT §6 con backend real, resolver decisiones y aprobar concretamente cualquier SQL antes de aplicarlo. Las nueve migraciones existentes no prueban despliegue actual.
 
-### 3. P2 — Corregir los dos defectos del motor de tests y aclarar métricas
+### 3. P2 — Aclarar métricas; conservar examen/adaptativo ya corregidos
 
-- **H3:** en examen, .correct/.wrong y ok/bad revelan corrección antes de terminar, pese a explain=false. Probar respuestas correctas e incorrectas sin revelado anticipado y revisión final completa.
-- **H4:** el adaptativo reinicia streak cada pregunta y no llega a dos aciertos/fallos. Probar secuencias ++/--, alternancia, bordes y buckets agotados sin repetición.
+- **H3 RESUELTO EN CLIENTE:** sin colores/corrección anticipada, con revisión final; tests simples/multi y navegador. No reabrir sin regresión reproducible.
+- **H4 RESUELTO EN CLIENTE:** ++/--, alternancia, rachas largas, bordes y buckets agotados sin repetir; navegador doce preguntas con subida/bajada. No reabrir sin regresión reproducible.
 - Mantener estudio libre separado del resultado evaluado. Reejecutar todas las suites study/SRS/dashboard/owner.
 - Decisión de producto separada: best por subconjunto puede ser 100 tras una pregunta; dashboard y estadísticas tienen fórmulas de maestría diferentes. Aclarar etiquetas/semántica antes de imponer una regla nueva o recalcular datos históricos.
 
@@ -84,8 +104,8 @@ Criterio de cierre: examen y adaptación cumplen lo que dice su UI; no se cambia
 
 - No existe CI versionada. Separar comprobaciones no mutantes (sintaxis, suites Node, integridad, SEO --check y navegador local) de harnesses con BD/fixtures/migraciones.
 - tests/run-all.sh ejecuta todos los shell, incluido pg-srs-delete que aplica 00008. No ejecutarlo a ciegas como comando de auditoría de solo lectura.
-- El conjunto versionado actual pasa: 31 suites / 518 checks y 62 JS con sintaxis válida. No ocultar los seis fallos de tres scratch históricos: actualizar expectativas o archivarlos explícitamente en una tarea autorizada. El antiguo conteo de defer incluye palabras de comentarios; el HTML tiene 22 etiquetas defer.
-- Priorizar fixtures que modelen datos/eventos reales y la validación backend real pendiente de H2 y las lagunas H3–H5, sin reescribir todos los arneses ni añadir dependencia por unas líneas.
+- El conjunto actual pasa: 32 suites / 589 checks y 63 JS con sintaxis válida (incluye test-engine integrado en 19f7af2). No ocultar los seis fallos de tres scratch históricos: actualizar expectativas o archivarlos explícitamente en una tarea autorizada. El antiguo conteo de defer incluye palabras de comentarios; el HTML tiene 22 etiquetas defer.
+- Priorizar fixtures que modelen datos/eventos reales y la validación backend real pendiente y las colisiones/empates de eventos, sin reescribir todos los arneses ni añadir dependencia por unas líneas.
 - Mantener ejecución de navegador en ambas bases, con/sin SW, móvil y offline; PostgreSQL real solo en job/entorno dedicado autorizado.
 
 Criterio de cierre: comando/CI repetible que no migra ni toca datos por sorpresa; omitidas y requisitos externos diferenciados de aprobadas.
@@ -119,11 +139,13 @@ Criterio de cierre: matriz auth actualizada con UI, tests, ejecución backend re
 
 ## 4. Evidencia que condiciona el siguiente encargo
 
+- Programa actual: **32 suites, 589 checks, cero fallos; 63 JS correctos**. PWA 28, SEO 22 y contenido 14; routing 132 entradas/132 recargas/64 internas/128 historial/66 offline. Chrome local escritorio/móvil/offline y dos pestañas reales. Datos cloud y A→B con transporte simulado; backend local no disponible y Supabase/RLS real NO VERIFICADOS. Sin commit/push/deploy/SQL. Los resultados anteriores se conservan debajo como historia, no se suman a esta ejecución.
+
 - Pruebas de P1-B/ad2eb22: **30 suites, 493 checks, cero fallos; 61 JS con sintaxis correcta**, incluida la nueva tests/auth-owner.test.js. Multi-pestaña simulada y operaciones async tardías verificadas. Supabase real/RLS real NO validados por backend local no disponible. No se reejecutaron durante esta revisión documental. Evidencia histórica de la auditoría base: sintaxis **60/60 JS** y SEO --check con cuatro HTML correctos.
 - Diagnósticos ignorados ejecutados: **nueve arneses, seis pasan/tres fallan; 144 checks OK/seis fallos por expectativas históricas**. No sumarlos a una afirmación de “todo verde”. Total ampliado histórico de aquella auditoría: 38 arneses, 619 checks aprobados/seis fallidos; no es una ejecución conjunta nueva con P1-A.
 - Navegador routing: **PASS**, raíz y mirror con/sin SW; 132 entradas, 132 recargas, 64 internas, 128 historial, 66 offline. Smoke adicional en 17 vistas y estudio móvil/offline.
 - Cuatro harnesses PostgreSQL/PostgREST **omitidos** por requerir escrituras/fixtures o migración. Backend real actual, correo, producción y Search Console **no verificados**.
-- H1 está RESUELTO en 801c006 y validado con dos pestañas reales. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL. Los defectos H3–H4 permanecen; H5 es una integración incompleta demostrada por productores/consumidores/SQL versionado; H6 limita la restauración. No se corrigieron en esta fase documental.
+- H1 está RESUELTO en 801c006 y validado con dos pestañas reales. H2: CORREGIDO EN CLIENTE / PENDIENTE VALIDACIÓN BACKEND REAL. H3–H4 están integrados en 19f7af2. H5/H6 tienen recorridos cliente corregidos y pendientes concretos de identidad/legacy/backend real según §2; no se declara sincronización completa.
 - CONTEXT contiene inventario de módulos/datos/storage y tabla de comparaciones históricas. README y DESPLIEGUE no se editaron: se recomienda actualizar inventario de funcionalidades, orden de carga, cifra de config tests y advertencia de runner mutante en otro encargo.
 
 ## 5. Historia preservada y forma de continuar
